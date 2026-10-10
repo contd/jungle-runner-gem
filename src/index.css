@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Cinzel', serif;
+    --font-body: 'Outfit', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: #0c150e;
+    color: #e5ede3;
+    overflow-x: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+.font-display {
+  font-family: 'Cinzel', serif;
+}
+
+.font-body {
+  font-family: 'Outfit', sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f1d13;
+}
+::-webkit-scrollbar-thumb {
+  background: #254d33;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #397a51;
+}
+
+/* Subtle scanline and retro jungle glow utilities */
+.retro-glow-gold {
+  text-shadow: 0 0 12px rgba(245, 197, 24, 0.5), 0 0 24px rgba(245, 197, 24, 0.2);
+}
+
+.retro-glow-emerald {
+  text-shadow: 0 0 12px rgba(52, 211, 153, 0.5), 0 0 24px rgba(16, 185, 129, 0.2);
+}

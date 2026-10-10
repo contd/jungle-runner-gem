@@ -1,0 +1,6 @@
+{
+  "name": "Jungle Run: Retro Adventure",
+  "description": "A modern retro endless jungle adventure game inspired by Atari 2600 Pitfall! featuring procedural hazards, vine swinging, treasure hunting, and local-first progression.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

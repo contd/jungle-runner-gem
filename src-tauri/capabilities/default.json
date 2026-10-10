@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for Jungle Run desktop and iOS builds",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}
