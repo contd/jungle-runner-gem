@@ -73,6 +73,11 @@ test('rejects invalid semantic versions and a stale Tauri configuration', () => 
   assert.throws(() => syncVersions(root), /must reference/);
 });
 
+test('shared Tauri config leaves the signing team unset for unsigned simulator CI', () => {
+  const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
+  assert.equal(config.bundle.iOS?.developmentTeam, undefined);
+});
+
 test('npm version patch runs the hook with no git commit or tag', () => {
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   execFileSync(npm, ['version', 'patch', '--no-git-tag-version'], {
