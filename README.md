@@ -397,6 +397,12 @@ This requires PowerShell 7 and the x64 Windows SDK tools installed by Visual
 Studio's Desktop development with C++ workload. The runner is scoped to the
 Windows test step; normal application builds and other platforms are unchanged.
 
+Native IPC tests derive the request origin from the mock WebView's actual URL:
+Windows uses `http://tauri.localhost`, while macOS/Linux use `tauri://localhost`.
+Hardcoding the Unix URL on Windows makes Tauri classify the request as remote
+and reject it before command dispatch. Both command tests also verify that an
+untrusted remote origin remains rejected; no application permissions are relaxed.
+
 Successful builds upload these downloadable Actions artifacts (not GitHub Releases):
 
 | Platform | Runner | Output |

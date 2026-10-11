@@ -256,14 +256,16 @@ fn actual_tauri_world_command_returns_plans_and_errors() {
     let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
         .build()
         .unwrap();
-    let invoke = |request: Value| {
+    // Derive the local origin from Tauri rather than assuming the Unix protocol.
+    let local_url = webview.url().unwrap();
+    let invoke_from = |request: Value, url: &str| {
         tauri::test::get_ipc_response(
             &webview,
             tauri::webview::InvokeRequest {
                 cmd: "native_world".into(),
                 callback: tauri::ipc::CallbackFn(0),
                 error: tauri::ipc::CallbackFn(1),
-                url: "tauri://localhost".parse().unwrap(),
+                url: url.parse().unwrap(),
                 body: tauri::ipc::InvokeBody::Json(json!({"request": request})),
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_string(),
@@ -271,6 +273,15 @@ fn actual_tauri_world_command_returns_plans_and_errors() {
         )
         .map(|body| body.deserialize::<Value>().unwrap())
     };
+    let invoke = |request| invoke_from(request, local_url.as_str());
+    assert!(
+        invoke_from(
+            json!({"state":{"rngState":1337,"lastChunkId":""},"distances":[0]}),
+            "https://untrusted.example.invalid"
+        )
+        .is_err(),
+        "Remote origins must not gain native world access"
+    );
     let result =
         invoke(json!({"state":{"rngState":1337,"lastChunkId":""},"distances":[0,300]})).unwrap();
     assert_eq!(result["chunks"].as_array().unwrap().len(), 2);

@@ -387,14 +387,17 @@ fn tauri_ipc_dispatches_native_operations_and_returns_errors() {
     let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
         .build()
         .unwrap();
-    let invoke = |request: Value| {
+    // Windows uses http://tauri.localhost, while Unix uses tauri://localhost.
+    // Use the actual mock WebView URL so IPC retains its local-origin authority.
+    let local_url = webview.url().unwrap();
+    let invoke_from = |request: Value, url: &str| {
         tauri::test::get_ipc_response(
             &webview,
             tauri::webview::InvokeRequest {
                 cmd: "native_data".into(),
                 callback: tauri::ipc::CallbackFn(0),
                 error: tauri::ipc::CallbackFn(1),
-                url: "tauri://localhost".parse().unwrap(),
+                url: url.parse().unwrap(),
                 body: tauri::ipc::InvokeBody::Json(json!({"request": request})),
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_string(),
@@ -402,6 +405,15 @@ fn tauri_ipc_dispatches_native_operations_and_returns_errors() {
         )
         .map(|body| body.deserialize::<Value>().unwrap())
     };
+    let invoke = |request| invoke_from(request, local_url.as_str());
+    assert!(
+        invoke_from(
+            json!({"operation": "loadProfile"}),
+            "https://untrusted.example.invalid"
+        )
+        .is_err(),
+        "Remote origins must not gain native profile access"
+    );
     assert_eq!(
         invoke(json!({"operation": "loadProfile"})).unwrap(),
         Value::Null
