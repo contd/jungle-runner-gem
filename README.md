@@ -358,9 +358,11 @@ In the repository's **Settings > Pages > Build and deployment**, choose
 **GitHub Actions** as the source. The [CI workflow](./.github/workflows/ci.yml)
 generates and verifies `./docs` on macOS, uploads it as the Pages artifact, and
 deploys only after all platform tests and builds succeed. Pushes to `main` or
-manual runs on `main` deploy; pull requests and version tags validate the site
+manual runs on `main`, and version-tag pushes deploy; pull requests validate the site
 without deploying it. No generated files need to be committed and no `gh-pages`
 branch is required.
+If the `github-pages` environment uses selected deployment rules, allow both
+the `main` branch and `v*` tags so tagged releases can deploy their documentation.
 
 The landing page's navigation links open the shared native library and desktop
 entry-point references. All generated asset/native links are relative so the site
@@ -403,7 +405,7 @@ Hardcoding the Unix URL on Windows makes Tauri classify the request as remote
 and reject it before command dispatch. Both command tests also verify that an
 untrusted remote origin remains rejected; no application permissions are relaxed.
 
-Successful builds upload these downloadable Actions artifacts (not GitHub Releases):
+Successful builds upload these downloadable Actions artifacts:
 
 | Platform | Runner | Output |
 | :--- | :--- | :--- |
@@ -430,6 +432,31 @@ team through `APPLE_DEVELOPMENT_TEAM` when configuring signed device builds.
 The iOS artifact cannot be installed on a physical device or submitted to the
 App Store; Android debug APKs are not Play Store releases. Desktop macOS builds
 are not notarized. Signed distribution builds require a separate credentials setup.
+
+### Tagged GitHub Releases
+
+Pushing a tag exactly matching the package version (for example `v1.2.3` for
+version `1.2.3`) publishes a GitHub Release only after the full test matrix,
+all five platform builds, docs verification, and Pages deployment pass. Main
+branch builds, pull requests, and manual dispatches do not create releases.
+Tags with a prerelease suffix produce a GitHub prerelease.
+
+The release includes five platform ZIPs, `jungle-run-docs.zip` (the immutable
+version-specific documentation snapshot), and `test-results.json` containing
+the current workflow run's job/step results. Release notes list each test runner's
+verified status, links to its logs and the full run, the live GitHub Pages URL,
+and unsigned/mobile artifact limitations. Test counts are not guessed from job
+success; see the linked logs for counts and individual results. Pages may later
+advance with newer main builds or tags.
+
+```bash
+npm version patch
+git push origin main --follow-tags
+```
+
+The release job alone receives `contents: write`; test/build jobs retain
+read-only repository access. No personal access token is required. Existing
+releases are not silently replaced: republishing an existing tag fails explicitly.
 
 ### One application version
 
