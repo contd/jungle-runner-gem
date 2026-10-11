@@ -1,6 +1,6 @@
 [package]
 name = "jungle-run"
-version = "1.1.2"
+version = "1.1.3"
 description = "Jungle Run - Modern Retro Adventure Game"
 authors = ["Jungle Run Team"]
 edition = "2021"
