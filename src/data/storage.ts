@@ -1,319 +1,157 @@
 /**
- * Jungle Run - IndexedDB & LocalStorage Robust Persistence Layer
- * Fully functional offline, with schema migrations and recovery.
+ * Browser-only IndexedDB/LocalStorage persistence and legacy migration reads.
+ * Native builds load this module only for one-time migration and never write
+ * browser profiles. Default helpers are reexported for existing browser callers.
+ * @module data/storage
  */
+import type { LocalProfile, Achievement, CharacterSkin } from './types.ts';
+import { createDefaultProfile, INITIAL_ACHIEVEMENTS, INITIAL_SKINS } from './defaults.ts';
+export {
+  createDefaultProfile, DEFAULT_KEY_BINDINGS, INITIAL_SETTINGS,
+  INITIAL_STATS, INITIAL_ACHIEVEMENTS, INITIAL_SKINS
+} from './defaults.ts';
 
-import { LocalProfile, PlayerStats, GameSettings, Achievement, CharacterSkin, RunRecord } from './types.ts';
-
+/** Origin-scoped legacy database, retained for standalone browser compatibility. */
 const DB_NAME = 'jungle_run_db';
+/** IndexedDB structural version, unchanged by the native migration. */
 const DB_VERSION = 1;
+/** Store containing the single browser aggregate. */
 const STORE_NAME = 'profile_store';
+/** Fixed saved profile key. */
 const PROFILE_KEY = 'player_profile_v1';
+/** Browser JSON mirror read as a migration fallback. */
 const LOCAL_STORAGE_FALLBACK_KEY = 'jungle_run_profile_fallback';
 
-export const DEFAULT_KEY_BINDINGS = {
-  jump: ['Space', 'KeyW', 'ArrowUp'],
-  slide: ['KeyS', 'ArrowDown'],
-  interact: ['KeyE', 'ShiftLeft', 'ShiftRight'],
-  pause: ['Escape', 'KeyP']
-};
-
-export const INITIAL_SETTINGS: GameSettings = {
-  musicVolume: 0.7,
-  sfxVolume: 0.8,
-  isMuted: false,
-  screenShake: true,
-  particleDensity: 'high',
-  showTouchControls: 'auto',
-  keyBindings: DEFAULT_KEY_BINDINGS
-};
-
-export const INITIAL_STATS: PlayerStats = {
-  totalRuns: 0,
-  totalDistanceMeters: 0,
-  totalCoins: 0,
-  totalRelics: 0,
-  highScore: 0,
-  longestDistanceMeters: 0,
-  mostVinesSwungInSingleRun: 0,
-  totalHazardsAvoided: 0,
-  lastPlayedTimestamp: Date.now()
-};
-
-export const INITIAL_ACHIEVEMENTS: Achievement[] = [
-  {
-    id: 'first_steps',
-    title: 'First Expedition',
-    description: 'Travel 100 meters through the dense jungle.',
-    category: 'survival',
-    progress: 0,
-    maxProgress: 100,
-    unlocked: false
-  },
-  {
-    id: 'deep_trek',
-    title: 'Deep Canopy Trek',
-    description: 'Survive for 500 meters in a single run.',
-    category: 'survival',
-    progress: 0,
-    maxProgress: 500,
-    unlocked: false
-  },
-  {
-    id: 'jungle_sovereign',
-    title: 'Jungle Sovereign',
-    description: 'Reach an incredible 1,500 meters in one adventure.',
-    category: 'milestone',
-    progress: 0,
-    maxProgress: 1500,
-    unlocked: false
-  },
-  {
-    id: 'vine_apprentice',
-    title: 'Liana Leaper',
-    description: 'Swing across 3 vines in a single run.',
-    category: 'traversal',
-    progress: 0,
-    maxProgress: 3,
-    unlocked: false
-  },
-  {
-    id: 'vine_master',
-    title: 'Vine Virtuoso',
-    description: 'Successfully swing across 15 vines across all runs.',
-    category: 'traversal',
-    progress: 0,
-    maxProgress: 15,
-    unlocked: false
-  },
-  {
-    id: 'coin_collector',
-    title: 'Treasure Seeker',
-    description: 'Collect 100 gold coins from ancient trails.',
-    category: 'treasure',
-    progress: 0,
-    maxProgress: 100,
-    unlocked: false
-  },
-  {
-    id: 'relic_hunter',
-    title: 'Golden Idol Hunter',
-    description: 'Recover 5 ancient golden relics and idols.',
-    category: 'treasure',
-    progress: 0,
-    maxProgress: 5,
-    unlocked: false
-  },
-  {
-    id: 'crocodile_dodger',
-    title: 'Crocodile Dodger',
-    description: 'Leap over 10 snapping swamp crocodiles.',
-    category: 'survival',
-    progress: 0,
-    maxProgress: 10,
-    unlocked: false
-  },
-  {
-    id: 'boulder_survivor',
-    title: 'Idol Raider',
-    description: 'Dodge or slide beneath 5 rolling boulders.',
-    category: 'survival',
-    progress: 0,
-    maxProgress: 5,
-    unlocked: false
-  },
-  {
-    id: 'centurion',
-    title: 'Tenacious Explorer',
-    description: 'Embark on 10 jungle runs.',
-    category: 'milestone',
-    progress: 0,
-    maxProgress: 10,
-    unlocked: false
-  },
-  {
-    id: 'high_scorer',
-    title: 'Legendary Score',
-    description: 'Achieve a score of 5,000 points or higher in one run.',
-    category: 'milestone',
-    progress: 0,
-    maxProgress: 5000,
-    unlocked: false
-  }
-];
-
-export const INITIAL_SKINS: CharacterSkin[] = [
-  {
-    id: 'harry',
-    name: 'Adventurer Harry',
-    title: 'The Legendary Explorer',
-    description: 'A daring archaeologist inspired by 1980s retro jungle legends.',
-    unlocked: true,
-    unlockRequirement: 'Available from the start',
-    colorTheme: {
-      shirt: '#c2a649',
-      pants: '#4a3728',
-      hat: '#3d2817',
-      accent: '#f59e0b'
-    }
-  },
-  {
-    id: 'maya',
-    name: 'Explorer Maya',
-    title: 'The Cartographer',
-    description: 'An agile ruins surveyor with unmatched agility on swinging vines.',
-    unlocked: false,
-    unlockRequirement: 'Collect 50 total gold coins',
-    colorTheme: {
-      shirt: '#10b981',
-      pants: '#1e293b',
-      hat: '#064e3b',
-      accent: '#34d399'
-    }
-  },
-  {
-    id: 'leo',
-    name: 'Ranger Leo',
-    title: 'Wilderness Sentinel',
-    description: 'A rugged protector of primeval rainforests who knows every crocodile swamp.',
-    unlocked: false,
-    unlockRequirement: 'Travel a total distance of 1,000 meters',
-    colorTheme: {
-      shirt: '#ef4444',
-      pants: '#374151',
-      hat: '#991b1b',
-      accent: '#f87171'
-    }
-  }
-];
-
-export function createDefaultProfile(): LocalProfile {
-  return {
-    schemaVersion: 1,
-    lastUpdated: Date.now(),
-    selectedCharacterId: 'harry',
-    stats: { ...INITIAL_STATS },
-    settings: { ...INITIAL_SETTINGS },
-    achievements: JSON.parse(JSON.stringify(INITIAL_ACHIEVEMENTS)),
-    unlockedSkins: JSON.parse(JSON.stringify(INITIAL_SKINS)),
-    recentRuns: []
-  };
-}
-
+/** Lazy browser persistence adapter; strict migration reads never manufacture defaults. */
 class StorageManager {
+  /** Shared IndexedDB opening attempt; failed attempts are cleared for explicit retry. */
   private dbPromise: Promise<IDBDatabase | null> | null = null;
 
+  /** Open/create the existing profile store; native migration handles errors explicitly. */
   private openDB(): Promise<IDBDatabase | null> {
-    if (typeof window === 'undefined' || !window.indexedDB) {
-      return Promise.resolve(null);
-    }
-    if (this.dbPromise) return this.dbPromise;
-
-    this.dbPromise = new Promise((resolve) => {
-      try {
-        const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-
-        request.onupgradeneeded = (event) => {
-          const db = (event.target as IDBOpenDBRequest).result;
-          if (!db.objectStoreNames.contains(STORE_NAME)) {
-            db.createObjectStore(STORE_NAME);
-          }
-        };
-
-        request.onsuccess = () => {
-          resolve(request.result);
-        };
-
-        request.onerror = () => {
-          console.warn('IndexedDB failed to open; falling back to LocalStorage');
-          resolve(null);
-        };
-      } catch (err) {
-        console.warn('IndexedDB exception; falling back to LocalStorage', err);
-        resolve(null);
-      }
+    if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve(null);
+    this.dbPromise ??= new Promise<IDBDatabase | null>((resolve, reject) => {
+      const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+      /** A blocked request can still succeed later; close that abandoned connection. */
+      let abandoned = false;
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+      };
+      request.onsuccess = () => {
+        if (abandoned) request.result.close();
+        else resolve(request.result);
+      };
+      request.onerror = () => reject(request.error ?? new Error('IndexedDB failed to open'));
+      request.onblocked = () => {
+        abandoned = true;
+        reject(new Error('IndexedDB profile database is blocked'));
+      };
+    }).catch((error: unknown) => {
+      this.dbPromise = null;
+      throw error;
     });
-
     return this.dbPromise;
   }
 
-  public async loadProfile(): Promise<LocalProfile> {
+  /**
+   * Read an existing aggregate without creating/saving defaults.
+   * @param strict - Native migration rejects unresolved read failures, never silently
+   * migrates an empty profile over unreadable legacy data. A valid mirror can recover
+   * an IndexedDB failure; successful recovery is logged.
+   */
+  public async loadExistingProfile(strict = false): Promise<LocalProfile | null> {
+    const failures: unknown[] = [];
     try {
       const db = await this.openDB();
       if (db) {
-        const record = await new Promise<LocalProfile | null>((resolve) => {
+        const record = await new Promise<unknown>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readonly');
-          const store = tx.objectStore(STORE_NAME);
-          const req = store.get(PROFILE_KEY);
-          req.onsuccess = () => resolve(req.result || null);
-          req.onerror = () => resolve(null);
+          const req = tx.objectStore(STORE_NAME).get(PROFILE_KEY);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error ?? new Error('IndexedDB profile read failed'));
+          tx.onabort = () => reject(tx.error ?? new Error('IndexedDB profile read aborted'));
         });
-
-        if (record) {
-          return this.migrateAndValidateProfile(record);
-        }
+        if (record) return strict ? this.legacyObject(record) : this.migrateAndValidateProfile(record);
       }
-    } catch (e) {
-      console.warn('Error reading from IndexedDB:', e);
+    } catch (error) {
+      console.warn('Error reading legacy IndexedDB profile:', error);
+      failures.push(error);
     }
-
-    // Fallback: LocalStorage
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const raw = window.localStorage.getItem(LOCAL_STORAGE_FALLBACK_KEY);
         if (raw) {
-          const parsed = JSON.parse(raw);
-          return this.migrateAndValidateProfile(parsed);
+          const parsed: unknown = JSON.parse(raw);
+          return strict ? this.legacyObject(parsed) : this.migrateAndValidateProfile(parsed);
         }
       }
-    } catch (e) {
-      console.warn('Error reading from LocalStorage:', e);
+    } catch (error) {
+      console.warn('Error reading legacy LocalStorage profile:', error);
+      failures.push(error);
     }
-
-    // Default profile
-    const def = createDefaultProfile();
-    await this.saveProfile(def);
-    return def;
+    if (strict && failures.length) {
+      throw new Error('Cannot read existing browser profile for native migration. Restore a valid browser backup before retrying.', {
+        cause: failures[0]
+      });
+    }
+    return null;
   }
 
+  /**
+   * Preserve raw legacy fields for Rust validation/migration, including older partial schemas.
+   * The cast is confined to this historical storage boundary; it is not trusted by native code.
+   */
+  private legacyObject(value: unknown): LocalProfile {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('Legacy profile must be an object');
+    }
+    return value as LocalProfile;
+  }
+
+  /** Browser load behavior: try saved sources, otherwise create and attempt to persist defaults. */
+  public async loadProfile(): Promise<LocalProfile> {
+    const existing = await this.loadExistingProfile();
+    if (existing) return existing;
+    const defaults = createDefaultProfile();
+    await this.saveProfile(defaults);
+    return defaults;
+  }
+
+  /** Write IndexedDB and a JSON backup; this is never used for native profile mutations. */
   public async saveProfile(profile: LocalProfile): Promise<boolean> {
     profile.lastUpdated = Date.now();
     let idbSuccess = false;
-
     try {
       const db = await this.openDB();
       if (db) {
-        idbSuccess = await new Promise<boolean>((resolve) => {
+        idbSuccess = await new Promise<boolean>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readwrite');
-          const store = tx.objectStore(STORE_NAME);
-          const req = store.put(profile, PROFILE_KEY);
-          req.onsuccess = () => resolve(true);
-          req.onerror = () => resolve(false);
+          tx.objectStore(STORE_NAME).put(profile, PROFILE_KEY);
+          tx.oncomplete = () => resolve(true);
+          tx.onabort = () => reject(tx.error ?? new Error('IndexedDB save aborted'));
+          tx.onerror = () => reject(tx.error ?? new Error('IndexedDB save failed'));
         });
       }
-    } catch (e) {
-      console.warn('Error saving to IndexedDB:', e);
+    } catch (error) {
+      console.warn('Error saving browser IndexedDB profile:', error);
     }
-
-    // Always mirror to localStorage as backup
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem(LOCAL_STORAGE_FALLBACK_KEY, JSON.stringify(profile));
         return true;
       }
-    } catch (e) {
-      console.warn('Error saving to LocalStorage:', e);
+    } catch (error) {
+      console.warn('Error saving browser LocalStorage profile:', error);
     }
-
     return idbSuccess;
   }
 
+  /** Preserve the browser's historical permissive field filling and catalog merging. */
   private migrateAndValidateProfile(data: any): LocalProfile {
     const fallback = createDefaultProfile();
     if (!data || typeof data !== 'object') return fallback;
-
-    // Schema version check & field migration
-    const profile: LocalProfile = {
+    return {
       schemaVersion: typeof data.schemaVersion === 'number' ? data.schemaVersion : 1,
       lastUpdated: data.lastUpdated || Date.now(),
       selectedCharacterId: data.selectedCharacterId || 'harry',
@@ -341,45 +179,36 @@ class StorageManager {
       unlockedSkins: this.mergeSkins(data.unlockedSkins),
       recentRuns: Array.isArray(data.recentRuns) ? data.recentRuns.slice(0, 50) : []
     };
-
-    return profile;
   }
 
+  /** Reapply catalog metadata while restoring saved goal progress by ID. */
   private mergeAchievements(savedAchievements: any[]): Achievement[] {
-    const list = JSON.parse(JSON.stringify(INITIAL_ACHIEVEMENTS));
+    const list = structuredClone(INITIAL_ACHIEVEMENTS);
     if (!Array.isArray(savedAchievements)) return list;
-
     const map = new Map<string, any>(savedAchievements.map(a => [a.id, a]));
-    return list.map((initial: Achievement) => {
+    return list.map(initial => {
       const saved = map.get(initial.id);
-      if (saved) {
-        return {
-          ...initial,
-          progress: typeof saved.progress === 'number' ? saved.progress : initial.progress,
-          unlocked: Boolean(saved.unlocked),
-          unlockedAt: saved.unlockedAt
-        };
-      }
-      return initial;
+      return saved ? {
+        ...initial,
+        progress: typeof saved.progress === 'number' ? saved.progress : initial.progress,
+        unlocked: Boolean(saved.unlocked),
+        unlockedAt: saved.unlockedAt
+      } : initial;
     });
   }
 
+  /** Restore known explorer unlocks; Harry remains available even in older saves. */
   private mergeSkins(savedSkins: any[]): CharacterSkin[] {
-    const list = JSON.parse(JSON.stringify(INITIAL_SKINS));
+    const list = structuredClone(INITIAL_SKINS);
     if (!Array.isArray(savedSkins)) return list;
-
     const map = new Map<string, any>(savedSkins.map(s => [s.id, s]));
-    return list.map((initial: CharacterSkin) => {
+    return list.map(initial => {
       const saved = map.get(initial.id);
-      if (saved) {
-        return {
-          ...initial,
-          unlocked: initial.id === 'harry' ? true : Boolean(saved.unlocked)
-        };
-      }
-      return initial;
+      return saved ? { ...initial, unlocked: initial.id === 'harry' || Boolean(saved.unlocked) } : initial;
     });
   }
 }
 
+/** Shared browser adapter, also used for the native backend's one-time legacy read. */
 export const storageManager = new StorageManager();
+export type { StorageManager };

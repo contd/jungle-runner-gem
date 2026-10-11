@@ -1,6 +1,7 @@
 /**
  * Jungle Run - Main Menu
  * Heroic adventure title, mode selector, character selector, and menu navigation.
+ * @module ui/MainMenu
  */
 
 import React, { useState } from 'react';
@@ -9,15 +10,27 @@ import { LocalProfile, GameMode } from '../data/types.ts';
 import { soundManager } from '../game/audio/SoundManager.ts';
 import splashHeroImg from '../assets/images/jungle_run_splash_hero_1791667978761.jpg';
 
-interface MainMenuProps {
+/** Read-only progression plus navigation/start callbacks owned by the application shell. */
+export interface MainMenuProps {
+  /** Profile snapshot supplying records, available skins, and the initial explorer choice. */
   profile: LocalProfile;
+  /** Start with selected rules/explorer and an optional parsed challenge seed. */
   onStartGame: (mode: GameMode, characterId: string, customSeed?: number) => void;
+  /** Open the achievement overlay without leaving the menu screen. */
   onOpenAchievements: () => void;
+  /** Open the lifetime statistics/history overlay. */
   onOpenStats: () => void;
+  /** Open audio, presentation, and backup controls. */
   onOpenSettings: () => void;
+  /** Open engine/asset attribution. */
   onOpenCredits: () => void;
 }
 
+/**
+ * Configure an expedition and navigate auxiliary menu overlays.
+ * Explorer selection is local to the menu and is passed to start; it does not call
+ * the repository's preferred-character persistence method.
+ */
 export const MainMenu: React.FC<MainMenuProps> = ({
   profile,
   onStartGame,
@@ -26,12 +39,17 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onOpenSettings,
   onOpenCredits
 }) => {
+  /** Pending mode choice, defaulting to the normal three-life expedition. */
   const [selectedMode, setSelectedMode] = useState<GameMode>('endless');
+  /** Pending explorer choice initialized from the profile at mount time. */
   const [selectedChar, setSelectedChar] = useState<string>(profile.selectedCharacterId || 'harry');
+  /** Raw seed input retained as text so empty input can request a random seed. */
   const [customSeedInput, setCustomSeedInput] = useState<string>('');
 
+  /** Parse nonempty challenge input in base ten; invalid/absent values leave the seed unspecified. */
   const handleStart = () => {
     soundManager.playClick();
+    /** Undefined requests randomization by the application shell rather than a fixed seed. */
     let seed: number | undefined = undefined;
     if (selectedMode === 'challenge' && customSeedInput.trim()) {
       const parsed = parseInt(customSeedInput.trim(), 10);
@@ -40,6 +58,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
     onStartGame(selectedMode, selectedChar, seed);
   };
 
+  /** Accept only unlocked menu entries and play selection feedback. */
   const handleCharSelect = (charId: string, unlocked: boolean) => {
     if (!unlocked) return;
     soundManager.playClick();
@@ -64,7 +83,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         <div className="flex items-center gap-2">
           <Compass className="w-5 h-5 text-emerald-400" />
           <span className="text-xs font-semibold tracking-wider text-emerald-300 uppercase">
-            Atari 2600 Pitfall! Homage
+            Jungle Run
           </span>
         </div>
 

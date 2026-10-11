@@ -2,32 +2,53 @@
  * Jungle Run - BootScene
  * Preloads imagery and procedurally synthesizes pixel-perfect textures and sprite frames
  * for all character skins, hazards, collectibles, and terrain.
+ * @module game/scenes/BootScene
  */
 
 import Phaser from 'phaser';
+import type { GameSceneInitData } from './GameScene.ts';
+import {
+  CHARACTER_SHEETS, EXPLORER_IDS, recolorCharacterPixels
+} from '../systems/characterAssets.ts';
+import type { CharacterPose } from '../systems/characterAssets.ts';
 
 // Asset paths
 import canopyBg from '../../assets/images/jungle_biome_canopy_1791667998523.jpg';
 import templeBg from '../../assets/images/jungle_biome_temple_1791667989618.jpg';
 import goldIdolImg from '../../assets/images/jungle_artifact_gold_idol_1791668007403.jpg';
 
+/**
+ * Asset initialization scene: Vite-bundled backgrounds plus Canvas-generated textures.
+ * Texture/animation keys form the contract consumed by GameScene; calling each
+ * Canvas texture's refresh uploads its drawing before gameplay begins.
+ */
 export class BootScene extends Phaser.Scene {
-  constructor() {
+  /** Complete run configuration forwarded only after textures have finished loading. */
+  private readonly gameplayData: GameSceneInitData;
+  /** Register the stable boot key selected first by the Phaser bridge. */
+  constructor(gameplayData: GameSceneInitData) {
     super({ key: 'BootScene' });
+    this.gameplayData = gameplayData;
   }
 
+  /** Queue bundled canopy, temple, and idol images under stable Phaser texture keys. */
   preload() {
     // Load generated high-fidelity environmental backdrops
     this.load.image('bg_canopy', canopyBg);
     this.load.image('bg_temple', templeBg);
     this.load.image('img_gold_idol', goldIdolImg);
+    for (const [pose, sheet] of Object.entries(CHARACTER_SHEETS)) {
+      this.load.image(`character_source_${pose}`, sheet.url);
+    }
   }
 
+  /** Generate gameplay textures/animations, then start GameScene through Phaser's scene manager. */
   create() {
     this.generateProceduralSprites();
-    this.scene.start('GameScene');
+    this.scene.start('GameScene', this.gameplayData);
   }
 
+  /** Initialize terrain, character poses, hazard/pickup textures, and particle primitives. */
   private generateProceduralSprites() {
     this.createGroundTiles();
     this.createPlayerSkins();
@@ -36,6 +57,7 @@ export class BootScene extends Phaser.Scene {
     this.createParticles();
   }
 
+  /** Draw 64-by-64 terrain tiles; collision/terrain gaps are configured by GameScene. */
   private createGroundTiles() {
     // 1. Jungle Ground Tile (64x64)
     const groundCanvas = this.textures.createCanvas('tile_ground', 64, 64);
@@ -87,178 +109,46 @@ export class BootScene extends Phaser.Scene {
     }
   }
 
+  /** Build palette variants from the outlined asset pack, retaining fixed collision-frame geometry. */
   private createPlayerSkins() {
-    const skinThemes = [
-      { id: 'harry', shirt: '#d4af37', pants: '#3e2723', hat: '#5d4037', skin: '#f5cba7' },
-      { id: 'maya', shirt: '#10b981', pants: '#1e293b', hat: '#064e3b', skin: '#e0ac69' },
-      { id: 'leo', shirt: '#ef4444', pants: '#374151', hat: '#7f1d1d', skin: '#ffdbac' }
-    ];
-
-    skinThemes.forEach(theme => {
-      // 1. Run animation sheet (4 frames of 48x64)
-      const runCanvas = this.textures.createCanvas(`player_${theme.id}_run`, 192, 64);
-      if (runCanvas) {
-        const ctx = runCanvas.getContext();
-        for (let f = 0; f < 4; f++) {
-          const ox = f * 48;
-          this.drawPlayerFrame(ctx, ox, 0, theme, 'run', f);
+    for (const explorer of EXPLORER_IDS) {
+      for (const pose of Object.keys(CHARACTER_SHEETS) as CharacterPose[]) {
+        const sheet = CHARACTER_SHEETS[pose];
+        const source = this.textures.get(`character_source_${pose}`).getSourceImage();
+        if (!(source instanceof HTMLImageElement)
+          || source.naturalWidth !== sheet.width * sheet.frames || source.naturalHeight !== sheet.height) {
+          throw new Error(`Missing or invalid character sheet: ${pose}`);
         }
-        runCanvas.refresh();
-
-        for (let f = 0; f < 4; f++) {
-          runCanvas.add(String(f), 0, f * 48, 0, 48, 64);
+        const key = `player_${explorer}_${pose}`;
+        const texture = this.textures.createCanvas(key, sheet.width * sheet.frames, sheet.height);
+        if (!texture) throw new Error(`Cannot create character texture: ${key}`);
+        const context = texture.getContext();
+        context.imageSmoothingEnabled = false;
+        context.drawImage(source, 0, 0);
+        const image = context.getImageData(0, 0, source.naturalWidth, source.naturalHeight);
+        recolorCharacterPixels(image.data, explorer);
+        context.putImageData(image, 0, 0);
+        texture.refresh();
+        texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+        for (let frame = 0; frame < sheet.frames; frame++) {
+          texture.add(String(frame), 0, frame * sheet.width, 0, sheet.width, sheet.height);
         }
-
-        // Register Phaser animation
-        this.anims.create({
-          key: `run_${theme.id}`,
-          frames: [
-            { key: `player_${theme.id}_run`, frame: '0' },
-            { key: `player_${theme.id}_run`, frame: '1' },
-            { key: `player_${theme.id}_run`, frame: '2' },
-            { key: `player_${theme.id}_run`, frame: '3' }
-          ],
-          frameRate: 10,
-          repeat: -1
-        });
+        if (sheet.frames > 1) {
+          this.anims.create({
+            key: `${pose}_${explorer}`,
+            frames: Array.from({ length: sheet.frames }, (_, frame) => ({ key, frame: String(frame) })),
+            frameRate: 10,
+            repeat: -1
+          });
+        }
       }
-
-      // 2. Jump Sprite (48x64)
-      const jumpCanvas = this.textures.createCanvas(`player_${theme.id}_jump`, 48, 64);
-      if (jumpCanvas) {
-        const ctx = jumpCanvas.getContext();
-        this.drawPlayerFrame(ctx, 0, 0, theme, 'jump', 0);
-        jumpCanvas.refresh();
-      }
-
-      // 3. Slide Sprite (64x36)
-      const slideCanvas = this.textures.createCanvas(`player_${theme.id}_slide`, 64, 36);
-      if (slideCanvas) {
-        const ctx = slideCanvas.getContext();
-        this.drawPlayerSlideFrame(ctx, 0, 0, theme);
-        slideCanvas.refresh();
-      }
-
-      // 4. Swing Sprite (48x64)
-      const swingCanvas = this.textures.createCanvas(`player_${theme.id}_swing`, 48, 64);
-      if (swingCanvas) {
-        const ctx = swingCanvas.getContext();
-        this.drawPlayerFrame(ctx, 0, 0, theme, 'swing', 0);
-        swingCanvas.refresh();
-      }
-    });
-  }
-
-  private drawPlayerFrame(
-    ctx: CanvasRenderingContext2D,
-    ox: number,
-    oy: number,
-    theme: any,
-    pose: 'run' | 'jump' | 'swing',
-    frame: number
-  ) {
-    const cx = ox + 24;
-
-    // Fedora Hat
-    ctx.fillStyle = theme.hat;
-    ctx.fillRect(cx - 14, oy + 8, 28, 6);
-    ctx.fillRect(cx - 9, oy + 2, 18, 8);
-    ctx.fillStyle = '#222';
-    ctx.fillRect(cx - 9, oy + 8, 18, 2);
-
-    // Face / Head
-    ctx.fillStyle = theme.skin;
-    ctx.fillRect(cx - 8, oy + 14, 16, 12);
-    // Eye
-    ctx.fillStyle = '#111';
-    ctx.fillRect(cx + 3, oy + 17, 3, 3);
-
-    // Torso / Jacket
-    ctx.fillStyle = theme.shirt;
-    ctx.fillRect(cx - 9, oy + 26, 18, 18);
-    // Belt & Buckle
-    ctx.fillStyle = '#2b1b11';
-    ctx.fillRect(cx - 10, oy + 42, 20, 4);
-    ctx.fillStyle = '#f59e0b';
-    ctx.fillRect(cx - 2, oy + 42, 4, 4);
-
-    // Limbs based on pose
-    ctx.fillStyle = theme.pants;
-    if (pose === 'run') {
-      const legOffsets = [
-        [-8, 6, 8, -6],
-        [-4, 2, 4, -2],
-        [8, -6, -8, 6],
-        [4, -2, -4, 2]
-      ][frame % 4];
-
-      // Left leg
-      ctx.fillRect(cx - 7, oy + 46, 6, 12 + legOffsets[0]);
-      // Right leg
-      ctx.fillRect(cx + 1, oy + 46, 6, 12 + legOffsets[2]);
-      // Boots
-      ctx.fillStyle = '#1f130b';
-      ctx.fillRect(cx - 8, oy + 56 + legOffsets[0], 8, 6);
-      ctx.fillRect(cx, oy + 56 + legOffsets[2], 8, 6);
-
-      // Arms
-      ctx.fillStyle = theme.shirt;
-      ctx.fillRect(cx - 12 + legOffsets[2], oy + 28, 5, 12);
-      ctx.fillRect(cx + 8 + legOffsets[0], oy + 28, 5, 12);
-    } else if (pose === 'jump') {
-      // Tucked athletic legs
-      ctx.fillRect(cx - 8, oy + 44, 7, 10);
-      ctx.fillRect(cx + 1, oy + 44, 7, 14);
-      // Boots
-      ctx.fillStyle = '#1f130b';
-      ctx.fillRect(cx - 9, oy + 52, 9, 6);
-      ctx.fillRect(cx + 1, oy + 56, 9, 6);
-      // Arms raised
-      ctx.fillStyle = theme.shirt;
-      ctx.fillRect(cx - 12, oy + 18, 5, 12);
-      ctx.fillRect(cx + 7, oy + 16, 5, 12);
-    } else if (pose === 'swing') {
-      // Arms holding vine overhead
-      ctx.fillStyle = theme.skin;
-      ctx.fillRect(cx - 6, oy - 2, 12, 6);
-      ctx.fillStyle = theme.shirt;
-      ctx.fillRect(cx - 9, oy + 4, 6, 22);
-      ctx.fillRect(cx + 3, oy + 4, 6, 22);
-      // Legs dangling angled
-      ctx.fillStyle = theme.pants;
-      ctx.fillRect(cx - 8, oy + 46, 6, 14);
-      ctx.fillRect(cx - 2, oy + 48, 6, 14);
-      // Boots
-      ctx.fillStyle = '#1f130b';
-      ctx.fillRect(cx - 7, oy + 58, 8, 5);
-      ctx.fillRect(cx - 1, oy + 60, 8, 5);
     }
   }
 
-  private drawPlayerSlideFrame(
-    ctx: CanvasRenderingContext2D,
-    ox: number,
-    oy: number,
-    theme: any
-  ) {
-    // Sliding player lying low horizontally
-    // Head & Hat
-    ctx.fillStyle = theme.hat;
-    ctx.fillRect(ox + 42, oy + 6, 18, 6);
-    ctx.fillRect(ox + 44, oy + 2, 14, 6);
-    ctx.fillStyle = theme.skin;
-    ctx.fillRect(ox + 40, oy + 12, 14, 10);
-    // Torso
-    ctx.fillStyle = theme.shirt;
-    ctx.fillRect(ox + 20, oy + 12, 22, 14);
-    // Legs outstretched behind
-    ctx.fillStyle = theme.pants;
-    ctx.fillRect(ox + 4, oy + 16, 18, 12);
-    // Boots
-    ctx.fillStyle = '#1f130b';
-    ctx.fillRect(ox, oy + 16, 6, 12);
-  }
-
+  /**
+   * Draw crocodile, boulder, log, branch, spikes, snake, vine, and bridge textures.
+   * These are visuals only: bodies, motion, and collision effects are configured in gameplay.
+   */
   private createHazards() {
     // 1. Crocodile (72x36)
     const crocCanvas = this.textures.createCanvas('hazard_crocodile', 72, 36);
@@ -410,6 +300,7 @@ export class BootScene extends Phaser.Scene {
     }
   }
 
+  /** Draw coin/relic/shield/magnet textures matching the scene's pickup type keys. */
   private createCollectibles() {
     // 1. Gold Coin (24x24)
     const coinCanvas = this.textures.createCanvas('item_coin', 24, 24);
@@ -482,6 +373,7 @@ export class BootScene extends Phaser.Scene {
     }
   }
 
+  /** Register small dust, water, and sparkle primitives for particle emitters. */
   private createParticles() {
     // Dust puff particle (8x8)
     const dustCanvas = this.textures.createCanvas('part_dust', 8, 8);

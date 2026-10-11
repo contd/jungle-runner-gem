@@ -1,15 +1,19 @@
 /**
  * Jungle Run - Credits & Asset Attribution Manifest
+ * @module ui/CreditsModal
  */
 
 import React from 'react';
 import { X, Heart, ShieldCheck, Sparkles } from 'lucide-react';
 import { soundManager } from '../game/audio/SoundManager.ts';
 
-interface CreditsModalProps {
+/** Navigation boundary for the static attribution overlay. */
+export interface CreditsModalProps {
+  /** Dismiss the overlay after optional click feedback. */
   onClose: () => void;
 }
 
+/** Present original-game inspiration, engine licenses, and locally generated asset attribution. */
 export const CreditsModal: React.FC<CreditsModalProps> = ({ onClose }) => {
   return (
     <div className="absolute inset-0 bg-stone-950/80 backdrop-blur-md flex items-center justify-center p-4 z-40 select-none overflow-y-auto">

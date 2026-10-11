@@ -1,0 +1,10 @@
+{
+  "worldGravity": 1200,
+  "playerGravity": 1200,
+  "jumpVelocity": 800,
+  "boostVelocity": 720,
+  "minimumRunSpeed": 290,
+  "landingMargin": 96,
+  "tileWidth": 64,
+  "crocodileBounceVelocity": 480
+}

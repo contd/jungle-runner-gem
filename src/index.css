@@ -1,3 +1,8 @@
+/**
+ * Global WebView/browser theme. TypeDoc does not parse CSS; the site overview
+ * describes these styles alongside the source-linked TypeScript entry point.
+ * Font files are requested by index.html, while these families retain local fallbacks.
+ */
 @import "tailwindcss";
 
 @layer base {
@@ -7,6 +12,7 @@
     --font-mono: 'JetBrains Mono', monospace;
   }
 
+  /* Suppress selection and horizontal page scroll so gestures belong to the game. */
   body {
     font-family: var(--font-body);
     background-color: #0c150e;

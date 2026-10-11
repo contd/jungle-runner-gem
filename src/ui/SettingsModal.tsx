@@ -1,5 +1,6 @@
 /**
  * Jungle Run - Settings & Data Management Modal
+ * @module ui/SettingsModal
  */
 
 import React, { useState } from 'react';
@@ -8,39 +9,68 @@ import { GameSettings } from '../data/types.ts';
 import { gameRepository } from '../data/repository.ts';
 import { soundManager } from '../game/audio/SoundManager.ts';
 
-interface SettingsModalProps {
+/** Controlled preferences and application callbacks for the menu settings overlay. */
+export interface SettingsModalProps {
+  /** Persisted preference snapshot supplying each input's current value. */
   settings: GameSettings;
+  /** Dismiss the overlay; profile changes are saved as they are requested. */
   onClose: () => void;
+  /** Forward a shallow settings patch to the application repository. */
   onUpdateSettings: (newSettings: Partial<GameSettings>) => void;
 }
 
+/**
+ * Manage audio/presentation preferences and local JSON backup/import/reset.
+ * Audio handlers also update the live mixer. Backup export prefers clipboard and
+ * falls back to a Blob download; imports use the repository's permissive object parser.
+ */
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onClose,
   onUpdateSettings
 }) => {
+  /** Temporary clipboard-success label; reset 2500 ms after a successful export. */
   const [copiedExport, setCopiedExport] = useState(false);
+  /** Raw pasted backup JSON, kept until a successful import. */
   const [importText, setImportText] = useState('');
+  /** Three-second success/error feedback; null hides the status area. */
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  /** Backend/export failures are displayed separately from success feedback. */
+  const [dataError, setDataError] = useState<string | null>(null);
 
+  /** Persist the normalized music slider value and apply it to the live mixer immediately. */
   const handleMusicChange = (val: number) => {
     onUpdateSettings({ musicVolume: val });
     soundManager.setVolumes(val, settings.sfxVolume, settings.isMuted);
   };
 
+  /** Persist the normalized effect slider value and apply it to the live mixer immediately. */
   const handleSfxChange = (val: number) => {
     onUpdateSettings({ sfxVolume: val });
     soundManager.setVolumes(settings.musicVolume, val, settings.isMuted);
   };
 
+  /** Toggle the master mute flag without discarding separate music/effect volume preferences. */
   const handleMuteToggle = () => {
     const nextMute = !settings.isMuted;
     onUpdateSettings({ isMuted: nextMute });
     soundManager.setVolumes(settings.musicVolume, settings.sfxVolume, nextMute);
   };
 
+  /**
+   * Export the entire aggregate to clipboard, or download JSON when clipboard access fails.
+   * The fallback revokes its object URL after triggering the browser download.
+   */
   const handleExportData = async () => {
-    const json = await gameRepository.exportData();
+    let json: string;
+    try {
+      json = await gameRepository.exportData();
+      setDataError(null);
+    } catch (error) {
+      console.error('Profile export failed:', error);
+      setDataError(String(error));
+      return;
+    }
     try {
       await navigator.clipboard.writeText(json);
       setCopiedExport(true);
@@ -57,23 +87,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  /** Submit nonempty backup text and display the repository's boolean parse/import result. */
   const handleImportData = async () => {
     if (!importText.trim()) return;
-    const ok = await gameRepository.importData(importText.trim());
-    if (ok) {
+    try {
+      const ok = await gameRepository.importData(importText.trim());
+      if (!ok) {
+        setDataError('Invalid backup file JSON.');
+        return;
+      }
+      setDataError(null);
       setImportStatus('Data successfully restored!');
       setImportText('');
       setTimeout(() => setImportStatus(null), 3000);
-    } else {
-      setImportStatus('Invalid backup file JSON.');
-      setTimeout(() => setImportStatus(null), 3000);
+    } catch (error) {
+      console.error('Profile import failed:', error);
+      setImportStatus(null);
+      setDataError(String(error));
     }
   };
 
+  /** Require a browser confirmation before replacing all local progression/preferences with defaults. */
   const handleResetData = async () => {
     if (confirm('Are you sure you want to reset all records, statistics, and unlocked explorers? This cannot be undone.')) {
-      await gameRepository.resetAllData();
-      alert('Data reset to default.');
+      try {
+        await gameRepository.resetAllData();
+        setDataError(null);
+        alert('Data reset to default.');
+      } catch (error) {
+        console.error('Profile reset failed:', error);
+        setDataError(String(error));
+      }
     }
   };
 
@@ -156,7 +200,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between pt-2 border-t border-stone-800">
               <div>
                 <div className="font-medium text-stone-200">On-Screen Touch Buttons</div>
-                <div className="text-[11px] text-stone-500">Virtual Jump & Slide buttons for touch devices</div>
+                <div className="text-[11px] text-stone-500">Virtual Move, Jump & Slide buttons for touch devices</div>
               </div>
               <select
                 value={settings.showTouchControls}
@@ -180,7 +224,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-300">
               <div className="bg-stone-900/60 p-2 rounded-lg border border-stone-800">
                 <span className="font-mono text-amber-300 font-bold">Space / Up / W</span>
-                <div className="text-stone-400 mt-0.5">Jump / Clear pits / Vine swing launch</div>
+                <div className="text-stone-400 mt-0.5">Jump / Press again for one mid-air boost / Vine launch</div>
               </div>
               <div className="bg-stone-900/60 p-2 rounded-lg border border-stone-800">
                 <span className="font-mono text-amber-300 font-bold">Down / S</span>
@@ -198,7 +242,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             <div className="text-[11px] text-stone-400 mt-1">
               <span className="font-semibold text-emerald-300">Mobile Gestures: </span>
-              Swipe Up to Jump, Swipe Down to Slide, Tap to Jump or grab vines. Gamepad A/B supported.
+              Hold Right Arrow, D-pad Right, or the Move button to run; release to stop. No backward movement.
+              Swipe Up to Jump, press Jump again for one mid-air boost, Swipe Down to Slide. Landing restores the boost. Gamepad A/B supported.
             </div>
           </div>
 
@@ -206,8 +251,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex flex-col gap-3 bg-stone-950/60 p-4 rounded-xl border border-stone-800">
             <h3 className="text-xs uppercase font-bold tracking-wider text-emerald-400">Local Data & Backup</h3>
             <p className="text-[11px] text-stone-400">
-              All gameplay, personal bests, and statistics are stored locally on your device in IndexedDB.
+              All gameplay, personal bests, and statistics are stored locally. Native apps use the Rust profile store; browsers use IndexedDB with a LocalStorage backup.
             </p>
+            {dataError && <div role="alert" className="text-xs text-red-300">{dataError}</div>}
 
             <div className="flex flex-wrap items-center gap-2">
               <button

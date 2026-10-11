@@ -1,5 +1,6 @@
 /**
  * Jungle Run - Game Over & Run Summary Modal
+ * @module ui/GameOverModal
  */
 
 import React, { useEffect } from 'react';
@@ -8,16 +9,29 @@ import { RotateCcw, Home, Trophy, Coins, Gem, Sparkles, Footprints, ShieldAlert 
 import { GameOverData } from '../game/scenes/GameScene.ts';
 import { soundManager } from '../game/audio/SoundManager.ts';
 
-interface GameOverModalProps {
+/** Scene result enriched by repository progression outcomes and application navigation. */
+export interface GameOverModalProps {
+  /** Terminal scene telemetry; this component does not perform persistence. */
   data: GameOverData;
+  /** Whether the repository observed a strictly higher lifetime score. */
   isNewHighScore: boolean;
+  /** Whether the repository observed a strictly longer completed run. */
   isNewLongestDistance: boolean;
+  /** Newly completed achievement titles to list in the result panel. */
   unlockedAchievements: string[];
+  /** Newly selectable explorer names to list in the result panel. */
   unlockedSkins: string[];
+  /** Begin a new session using the parent's restart policy. */
   onPlayAgain: () => void;
+  /** Return to the menu and unmount the completed engine. */
   onMainMenu: () => void;
 }
 
+/**
+ * Display final telemetry, translated death cause, records, and unlock notifications.
+ * Confetti is attempted for record/achievement outcomes; cosmetic failure does not
+ * prevent displaying results. A skin unlock alone does not trigger that effect.
+ */
 export const GameOverModal: React.FC<GameOverModalProps> = ({
   data,
   isNewHighScore,
@@ -41,6 +55,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     }
   }, [isNewHighScore, isNewLongestDistance, unlockedAchievements]);
 
+  /** Translate known scene cause codes; unknown codes share a generic jungle-peril label. */
   const getCauseTitle = (cause: string) => {
     switch (cause) {
       case 'crocodile': return 'Snapping Crocodile Jaws';

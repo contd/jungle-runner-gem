@@ -1,5 +1,6 @@
 /**
  * Jungle Run - Achievements Modal
+ * @module ui/AchievementsModal
  */
 
 import React from 'react';
@@ -7,12 +8,17 @@ import { X, Trophy, CheckCircle2, Lock } from 'lucide-react';
 import { Achievement } from '../data/types.ts';
 import { soundManager } from '../game/audio/SoundManager.ts';
 
-interface AchievementsModalProps {
+/** Catalog/progression snapshot and menu-owned dismissal callback. */
+export interface AchievementsModalProps {
+  /** All known goals, including locked entries with partial progress. */
   achievements: Achievement[];
+  /** Dismiss the overlay without mutating progression. */
   onClose: () => void;
 }
 
+/** Show completion counts and capped percentage bars while preserving each goal's raw progress text. */
 export const AchievementsModal: React.FC<AchievementsModalProps> = ({ achievements, onClose }) => {
+  /** Completion comes from stored unlock flags, not inferred progress percentages. */
   const completedCount = achievements.filter(a => a.unlocked).length;
 
   return (
@@ -45,6 +51,7 @@ export const AchievementsModal: React.FC<AchievementsModalProps> = ({ achievemen
         {/* Achievements List */}
         <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-2.5">
           {achievements.map((ach) => {
+            /** Rounded visual percentage, upper-capped to avoid overflowing the bar. */
             const pct = Math.min(100, Math.round((ach.progress / ach.maxProgress) * 100));
 
             return (

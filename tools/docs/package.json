@@ -1,0 +1,12 @@
+{
+  "name": "jungle-run-documentation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "typedoc --options ../../typedoc.json && cargo doc --manifest-path ../../src-tauri/Cargo.toml --locked --no-deps --document-private-items && node publish-native.mjs"
+  },
+  "devDependencies": {
+    "typedoc": "0.28.20",
+    "typescript": "~6.0.3"
+  }
+}

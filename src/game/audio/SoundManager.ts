@@ -2,26 +2,48 @@
  * Jungle Run - Sound & Music Manager
  * Procedural Web Audio API synthesizer for 100% offline, zero-asset-failure audio.
  * Generates retro-arcade sound effects and a dynamic jungle adventure music loop.
+ * @module game/audio/SoundManager
  */
 
+/**
+ * Lazy Web Audio mixer and procedural one-shot/music scheduler.
+ * Frequencies are hertz, AudioContext times are seconds, and browser timers use
+ * milliseconds. Effects are skipped when muted or audio nodes are unavailable.
+ */
 export class SoundManager {
+  /** Browser audio clock/context, created only after resume or an effect request. */
   private ctx: AudioContext | null = null;
+  /** Attenuated music bus, feeding the master mute bus. */
   private musicGainNode: GainNode | null = null;
+  /** Independent effect-volume bus feeding the master mute bus. */
   private sfxGainNode: GainNode | null = null;
+  /** Master gate: gain zero while muted, one otherwise. */
   private masterGainNode: GainNode | null = null;
 
+  /** Scheduler-active flag; mute does not stop progression through the loop. */
   private isMusicPlaying = false;
+  /** Pending browser timeout for the next eight-step scheduling batch. */
   private musicTimerId: number | null = null;
+  /** Next step within the repeating sixteen-step melody. */
   private musicStep = 0;
 
+  /** Clamped user effect-volume preference, retained before nodes exist. */
   private sfxVolume = 0.8;
+  /** Clamped user music-volume preference, attenuated at the music bus. */
   private musicVolume = 0.7;
+  /** Master mute preference; keeps gain values so unmuting restores them. */
   private isMuted = false;
 
+  /** Construct without opening audio, preserving browser interaction requirements. */
   constructor() {
     // AudioContext will be lazily initialized on first user interaction
   }
 
+  /**
+   * Lazily create master/effect/music buses, including the legacy WebKit context alias.
+   * Initialization attenuates music to 40%; later volume updates use 35%.
+   * Unsupported audio leaves the mixer inactive; thrown initialization errors are logged.
+   */
   private initContext() {
     if (this.ctx) return;
     try {
@@ -45,6 +67,10 @@ export class SoundManager {
     }
   }
 
+  /**
+   * Initialize audio and request resumption of a suspended context.
+   * Call from user interaction; the existing implementation ignores rejected resumes.
+   */
   public resume() {
     this.initContext();
     if (this.ctx && this.ctx.state === 'suspended') {
@@ -52,6 +78,12 @@ export class SoundManager {
     }
   }
 
+  /**
+   * Clamp preferences to [0, 1] and update live gains when the graph exists.
+   * @param musicVol - Music preference before the additional 35% bus attenuation.
+   * @param sfxVol - Effect preference, applied directly to its bus.
+   * @param muted - Whether the master gain should be zero.
+   */
   public setVolumes(musicVol: number, sfxVol: number, muted: boolean) {
     this.musicVolume = Math.max(0, Math.min(1, musicVol));
     this.sfxVolume = Math.max(0, Math.min(1, sfxVol));
@@ -67,6 +99,7 @@ export class SoundManager {
 
   // --- Retro Sound Effects ---
 
+  /** Play a 160-to-480 Hz square-wave rise for a jump or crocodile bounce. */
   public playJump() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -89,6 +122,7 @@ export class SoundManager {
     osc.stop(t + 0.18);
   }
 
+  /** Play 180 ms of white noise through a descending low-pass filter for sliding. */
   public playSlide() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -122,6 +156,7 @@ export class SoundManager {
     noise.stop(t + 0.18);
   }
 
+  /** Play a B5/E6 sine-wave chime when a coin is collected. */
   public playCoin() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -144,6 +179,7 @@ export class SoundManager {
     osc.stop(t + 0.23);
   }
 
+  /** Schedule a C6/E6/G6/C7 triangle-wave arpeggio, spaced at 60 ms per note. */
   public playRelic() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -171,6 +207,7 @@ export class SoundManager {
     });
   }
 
+  /** Play a brief rising triangle tone when latching to a vine. */
   public playVineGrab() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -193,6 +230,7 @@ export class SoundManager {
     osc.stop(t + 0.13);
   }
 
+  /** Play a longer rising sine tone when launching off an attached vine. */
   public playVineSwing() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -215,6 +253,7 @@ export class SoundManager {
     osc.stop(t + 0.23);
   }
 
+  /** Play a falling sawtooth jaw-snap effect, available for future scene wiring. */
   public playCrocodileSnap() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -237,6 +276,7 @@ export class SoundManager {
     osc.stop(t + 0.16);
   }
 
+  /** Play a low descending sawtooth impact for shield absorption or life loss. */
   public playHit() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -259,6 +299,7 @@ export class SoundManager {
     osc.stop(t + 0.26);
   }
 
+  /** Schedule the descending G4/F4/E-flat4/C4 loss motif at 180 ms intervals. */
   public playGameOver() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -285,6 +326,7 @@ export class SoundManager {
     });
   }
 
+  /** Play a 50 ms triangle-wave UI feedback click. */
   public playClick() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -305,6 +347,7 @@ export class SoundManager {
     osc.stop(t + 0.05);
   }
 
+  /** Play a rising C4-to-C6 triangle tone for either power-up pickup. */
   public playPowerup() {
     this.resume();
     if (!this.ctx || !this.sfxGainNode || this.isMuted) return;
@@ -329,6 +372,7 @@ export class SoundManager {
 
   // --- Dynamic Procedural Retro Jungle Adventure Music ---
 
+  /** Start the loop at step zero; repeated calls while running do not add schedulers. */
   public startMusic() {
     if (this.isMusicPlaying) return;
     this.isMusicPlaying = true;
@@ -336,6 +380,10 @@ export class SoundManager {
     this.scheduleNextMusicBar();
   }
 
+  /**
+   * Cancel future scheduling batches.
+   * Already scheduled oscillator notes are not canceled and can finish sounding.
+   */
   public stopMusic() {
     this.isMusicPlaying = false;
     if (this.musicTimerId !== null) {
@@ -344,13 +392,20 @@ export class SoundManager {
     }
   }
 
+  /**
+   * Schedule eight 150 ms steps of bass, percussion, and melody ahead of the audio clock.
+   * A 1100 ms timeout starts the next 1200 ms batch with a small scheduling overlap.
+   * Muted batches still advance the sixteen-step index.
+   */
   private scheduleNextMusicBar() {
     if (!this.isMusicPlaying) return;
     this.resume();
 
     // 16-step rhythmic jungle adventure progression in A minor pentatonic
     // (A, C, D, E, G) with marimba-like notes and tribal bassline pulse
+    /** Eight-note bass frequencies in hertz, reused across the sixteen-step loop. */
     const bassScale = [110, 110, 130.81, 110, 146.83, 110, 164.81, 130.81];
+    /** Melody frequencies in hertz; zero entries are rests, not zero-frequency notes. */
     const melodyScale = [
       440, 0, 523.25, 587.33, 659.25, 0, 587.33, 523.25,
       440, 392, 440, 523.25, 659.25, 783.99, 659.25, 523.25
@@ -416,4 +471,5 @@ export class SoundManager {
   }
 }
 
+/** Shared lazy mixer for menu feedback, gameplay effects, and run music. */
 export const soundManager = new SoundManager();

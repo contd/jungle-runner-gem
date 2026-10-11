@@ -1,0 +1,104 @@
+[
+  {
+    "id": "warmup_stroll", "name": "Control Practice Trail", "width": 960, "minTier": 1, "biome": "canopy",
+    "obstacles": [],
+    "collectibles": [
+      {"type": "coin", "xOffset": 300, "yOffset": -30},
+      {"type": "coin", "xOffset": 480, "yOffset": -30},
+      {"type": "coin", "xOffset": 660, "yOffset": -30}
+    ]
+  },
+  {
+    "id": "intro_flat", "name": "Gentle Jungle Path", "width": 960, "minTier": 1, "biome": "canopy",
+    "obstacles": [{"type": "log", "xOffset": 500, "width": 48, "height": 32}],
+    "collectibles": [
+      {"type": "coin", "xOffset": 250, "yOffset": -30}, {"type": "coin", "xOffset": 320, "yOffset": -30},
+      {"type": "coin", "xOffset": 500, "yOffset": -90}, {"type": "coin", "xOffset": 700, "yOffset": -30}
+    ],
+    "decorations": [{"type": "tree", "xOffset": 120, "yOffset": 0}, {"type": "fern", "xOffset": 380, "yOffset": 0}]
+  },
+  {
+    "id": "intro_branch_slide", "name": "Low Thorny Branch", "width": 960, "minTier": 1, "biome": "canopy",
+    "obstacles": [{"type": "overhead_branch", "xOffset": 480, "width": 140, "height": 40, "yOffset": -65}],
+    "collectibles": [
+      {"type": "coin", "xOffset": 430, "yOffset": -20}, {"type": "coin", "xOffset": 490, "yOffset": -20},
+      {"type": "coin", "xOffset": 550, "yOffset": -20}
+    ],
+    "decorations": [{"type": "hanging_moss", "xOffset": 480, "yOffset": -120}]
+  },
+  {
+    "id": "intro_pit_jump", "name": "The Chasm Leap", "width": 960, "minTier": 1, "biome": "canopy",
+    "obstacles": [{"type": "pit", "xOffset": 420, "width": 130}],
+    "collectibles": [
+      {"type": "coin", "xOffset": 420, "yOffset": -80}, {"type": "coin", "xOffset": 485, "yOffset": -110},
+      {"type": "coin", "xOffset": 550, "yOffset": -80}
+    ]
+  },
+  {
+    "id": "intro_vine_swing", "name": "Classic Liana Chasm", "width": 960, "minTier": 2, "biome": "canopy",
+    "obstacles": [{"type": "pit", "xOffset": 350, "width": 340}, {"type": "swing_vine", "xOffset": 520, "yOffset": -240, "meta": {"length": 220}}],
+    "collectibles": [{"type": "relic", "xOffset": 520, "yOffset": -140}, {"type": "coin", "xOffset": 750, "yOffset": -30}]
+  },
+  {
+    "id": "swamp_crocodile_crossing", "name": "Crocodile Lagoon", "width": 960, "minTier": 2, "biome": "swamp",
+    "obstacles": [
+      {"type": "water_lagoon", "xOffset": 340, "width": 380}, {"type": "crocodile", "xOffset": 440, "width": 70, "height": 35},
+      {"type": "crocodile", "xOffset": 600, "width": 70, "height": 35}
+    ],
+    "collectibles": [{"type": "coin", "xOffset": 440, "yOffset": -80}, {"type": "coin", "xOffset": 600, "yOffset": -80}]
+  },
+  {
+    "id": "swamp_quicksand_log", "name": "Quicksand & Log", "width": 960, "minTier": 2, "biome": "swamp",
+    "obstacles": [{"type": "quicksand", "xOffset": 300, "width": 140}, {"type": "log", "xOffset": 660, "width": 48, "height": 32}],
+    "collectibles": [
+      {"type": "coin", "xOffset": 250, "yOffset": -30}, {"type": "powerup_shield", "xOffset": 500, "yOffset": -40},
+      {"type": "coin", "xOffset": 660, "yOffset": -90}
+    ]
+  },
+  {
+    "id": "swamp_snake_pit", "name": "Serpent Marsh", "width": 960, "minTier": 2, "biome": "swamp",
+    "obstacles": [{"type": "snake", "xOffset": 380, "width": 40, "height": 25}, {"type": "pit", "xOffset": 620, "width": 120}],
+    "collectibles": [{"type": "coin", "xOffset": 380, "yOffset": -80}, {"type": "coin", "xOffset": 620, "yOffset": -80}]
+  },
+  {
+    "id": "temple_rolling_boulder", "name": "Rolling Boulder Escape", "width": 960, "minTier": 3, "biome": "temple",
+    "obstacles": [{"type": "rolling_boulder", "xOffset": 850, "width": 64, "height": 64, "speed": -180}, {"type": "spike_trap", "xOffset": 360, "width": 60, "height": 30}],
+    "collectibles": [{"type": "relic", "xOffset": 600, "yOffset": -70}, {"type": "coin", "xOffset": 360, "yOffset": -90}],
+    "decorations": [{"type": "ruin_pillar", "xOffset": 200, "yOffset": 0}, {"type": "ruin_pillar", "xOffset": 720, "yOffset": 0}]
+  },
+  {
+    "id": "temple_double_vine", "name": "Sacred Temple Abyss", "width": 960, "minTier": 3, "biome": "temple",
+    "obstacles": [
+      {"type": "pit", "xOffset": 300, "width": 440}, {"type": "swing_vine", "xOffset": 420, "yOffset": -240, "meta": {"length": 220}},
+      {"type": "swing_vine", "xOffset": 620, "yOffset": -240, "meta": {"length": 220}}
+    ],
+    "collectibles": [{"type": "relic", "xOffset": 520, "yOffset": -120}, {"type": "powerup_magnet", "xOffset": 800, "yOffset": -30}]
+  },
+  {
+    "id": "temple_collapsing_bridge", "name": "Ancient Wooden Slats", "width": 960, "minTier": 3, "biome": "temple",
+    "obstacles": [{"type": "collapsing_bridge", "xOffset": 360, "width": 280}, {"type": "overhead_branch", "xOffset": 760, "width": 120, "height": 40, "yOffset": -65}],
+    "collectibles": [
+      {"type": "coin", "xOffset": 420, "yOffset": -40}, {"type": "coin", "xOffset": 500, "yOffset": -40},
+      {"type": "coin", "xOffset": 580, "yOffset": -40}
+    ]
+  },
+  {
+    "id": "gauntlet_crocodile_boulder", "name": "Apex Predator Gauntlet", "width": 960, "minTier": 4, "biome": "cavern",
+    "obstacles": [
+      {"type": "spike_trap", "xOffset": 240, "width": 50, "height": 30}, {"type": "water_lagoon", "xOffset": 420, "width": 300},
+      {"type": "crocodile", "xOffset": 560, "width": 70, "height": 35}, {"type": "rolling_boulder", "xOffset": 880, "width": 64, "height": 64, "speed": -210}
+    ],
+    "collectibles": [
+      {"type": "relic", "xOffset": 560, "yOffset": -90}, {"type": "coin", "xOffset": 320, "yOffset": -30},
+      {"type": "coin", "xOffset": 800, "yOffset": -30}
+    ]
+  },
+  {
+    "id": "gauntlet_vine_spikes", "name": "Spiked Chasm Swing", "width": 960, "minTier": 4, "biome": "cavern",
+    "obstacles": [
+      {"type": "pit", "xOffset": 340, "width": 360}, {"type": "swing_vine", "xOffset": 520, "yOffset": -240, "meta": {"length": 220}},
+      {"type": "overhead_branch", "xOffset": 780, "width": 130, "height": 40, "yOffset": -65}
+    ],
+    "collectibles": [{"type": "relic", "xOffset": 480, "yOffset": -130}, {"type": "coin", "xOffset": 880, "yOffset": -30}]
+  }
+]

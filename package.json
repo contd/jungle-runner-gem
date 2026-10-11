@@ -9,9 +9,17 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run && node --test tools/version-tests.mjs",
+    "version": "node tools/sync-version.mjs",
+    "version:sync": "node tools/sync-version.mjs",
+    "version:check": "node tools/sync-version.mjs --check",
+    "tauri": "tauri",
+    "docs:install": "bun install --cwd tools/docs --frozen-lockfile",
+    "docs": "npm --prefix tools/docs run build",
+    "docs:preview": "vite preview --outDir docs --port 4174"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
@@ -31,6 +39,7 @@
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@tauri-apps/cli": "^2.0.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.3.3",

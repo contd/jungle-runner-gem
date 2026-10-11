@@ -1,0 +1,8 @@
+{
+  "safeStartMeters": 100,
+  "warmupMeters": 300,
+  "tier2Meters": 600,
+  "tier3Meters": 1200,
+  "tier4Meters": 2200,
+  "speedRampStartMeters": 600
+}

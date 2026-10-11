@@ -1,5 +1,6 @@
 /**
  * Jungle Run - Statistics & Career Records Modal
+ * @module ui/StatsModal
  */
 
 import React from 'react';
@@ -7,12 +8,21 @@ import { X, Trophy, Footprints, Coins, Gem, Compass, History, Shield } from 'luc
 import { LocalProfile } from '../data/types.ts';
 import { soundManager } from '../game/audio/SoundManager.ts';
 
-interface StatsModalProps {
+/** Read-only career aggregate and dismissal callback. */
+export interface StatsModalProps {
+  /** Lifetime totals plus newest-first completed-run history. */
   profile: LocalProfile;
+  /** Dismiss the overlay without changing persisted data. */
   onClose: () => void;
 }
 
+/**
+ * Present lifetime counters and at most fifteen recent expeditions.
+ * Dates/numbers use browser locale formatting; history remains in repository order.
+ * This is a presentation subset of the 30-run recording/50-run loading limits.
+ */
 export const StatsModal: React.FC<StatsModalProps> = ({ profile, onClose }) => {
+  /** Shared statistics aggregate, used read-only by this component. */
   const stats = profile.stats;
 
   return (

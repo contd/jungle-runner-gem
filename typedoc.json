@@ -1,0 +1,24 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "Jungle Run - Application and Test Reference",
+  "entryPoints": ["src", "tests"],
+  "entryPointStrategy": "expand",
+  "tsconfig": "tsconfig.json",
+  "out": "docs",
+  "json": "docs/api.json",
+  "readme": "README.md",
+  "excludePrivate": false,
+  "excludeProtected": false,
+  "excludeExternals": true,
+  "githubPages": true,
+  "treatWarningsAsErrors": true,
+  "validation": {
+    "invalidLink": true,
+    "notExported": true,
+    "notDocumented": true
+  },
+  "navigationLinks": {
+    "Native shell (rustdoc)": "./native/jungle_run_lib/index.html",
+    "Desktop entry point (rustdoc)": "./native/jungle_run/index.html"
+  }
+}

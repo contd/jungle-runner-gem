@@ -1,5 +1,6 @@
 /**
  * Jungle Run - Pause Modal
+ * @module ui/PauseModal
  */
 
 import React from 'react';
@@ -7,14 +8,21 @@ import { Play, RotateCcw, Home, Volume2, VolumeX } from 'lucide-react';
 import { soundManager } from '../game/audio/SoundManager.ts';
 import { GameSettings } from '../data/types.ts';
 
-interface PauseModalProps {
+/** Controlled pause actions and live audio preferences. */
+export interface PauseModalProps {
+  /** Current audio preferences shared with the full settings overlay. */
   settings: GameSettings;
+  /** Resume the existing run rather than replace its engine instance. */
   onResume: () => void;
+  /** Abandon this run and start a freshly seeded session. */
   onRestart: () => void;
+  /** Return to the main menu without recording the unfinished run. */
   onQuit: () => void;
+  /** Request a persisted shallow preference change. */
   onUpdateSettings: (newSettings: Partial<GameSettings>) => void;
 }
 
+/** Present pause navigation and immediate audio controls; the parent actually pauses Phaser. */
 export const PauseModal: React.FC<PauseModalProps> = ({
   settings,
   onResume,
@@ -22,16 +30,19 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   onQuit,
   onUpdateSettings
 }) => {
+  /** Persist the music gain preference and update the live attenuated music bus. */
   const handleMusicChange = (val: number) => {
     onUpdateSettings({ musicVolume: val });
     soundManager.setVolumes(val, settings.sfxVolume, settings.isMuted);
   };
 
+  /** Persist the effect gain preference and update the live effect bus. */
   const handleSfxChange = (val: number) => {
     onUpdateSettings({ sfxVolume: val });
     soundManager.setVolumes(settings.musicVolume, val, settings.isMuted);
   };
 
+  /** Invert master mute while retaining the separate bus-volume preferences. */
   const handleMuteToggle = () => {
     const nextMute = !settings.isMuted;
     onUpdateSettings({ isMuted: nextMute });

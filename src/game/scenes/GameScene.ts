@@ -2,123 +2,243 @@
  * Jungle Run - Main GameScene
  * Complete endless runner with physics, parallax, vine swinging, crocodiles,
  * rolling boulders, collectibles, power-ups, and audio triggers.
+ * Positions use virtual pixels, velocities pixels/second, and frame timers milliseconds.
+ * @module game/scenes/GameScene
  */
 
 import Phaser from 'phaser';
-import { ProceduralWorldGenerator, ChunkDefinition, BiomeType } from '../systems/ProceduralGenerator.ts';
+import { WorldGenerator } from '../systems/WorldGenerator.ts';
+import { MOVEMENT, runSpeedAtDistance } from '../systems/movement.ts';
+import { vineTip } from '../systems/vineGeometry.ts';
+import { SWING_GRIP } from '../systems/characterAssets.ts';
+import type { PlannedChunk, BiomeType, WorldStatus } from '../systems/worldTypes.ts';
 import { soundManager } from '../audio/SoundManager.ts';
 import { InputManager } from '../input/InputManager.ts';
 import { GameMode } from '../../data/types.ts';
 
+/** Run configuration passed by the React/Phaser bridge when starting the scene. */
 export interface GameSceneInitData {
+  /** Shared logical-action manager; scene listeners react to press notifications. */
   inputManager: InputManager;
+  /** Boot-generated explorer texture/animation ID. */
   characterId: string;
+  /** Life/fall rules for this expedition. */
   gameMode: GameMode;
+  /** Chunk-selection seed; a falsy value currently triggers randomization in init. */
   seed: number;
+  /** Whether impact/relic effects may shake the camera. */
   screenShakeEnabled: boolean;
+  /** Per-frame callback updating the React telemetry overlay. */
   onStatsUpdate: (stats: GameHUDStats) => void;
+  /** One-shot completion callback; persistence belongs to the React shell. */
   onGameOver: (result: GameOverData) => void;
+  /** Terrain wait/failure gate owned by the React bridge; null clears only this pause reason. */
+  onWorldStatus: (status: WorldStatus | null) => void;
 }
 
+/** Telemetry snapshot emitted each active update; not itself a persisted run record. */
 export interface GameHUDStats {
+  /** Floored current score, including distance and pickup bonuses. */
   score: number;
+  /** Current floored distance, using 24 virtual pixels per game meter. */
   distanceMeters: number;
+  /** Raw coin pickup count. */
   coins: number;
+  /** Raw relic pickup count. */
   relics: number;
+  /** Current score multiplier, capped at five. */
   multiplier: number;
+  /** Remaining life counter; practice initializes to 999 and the HUD shows infinity. */
   lives: number;
+  /** Whether one non-pit damage event can be absorbed. */
   shieldActive: boolean;
+  /** Whether nearby coins are being attracted to the runner. */
   magnetActive: boolean;
+  /** Biome of the latest spawned chunk, not necessarily the runner's current tile. */
   currentBiome: BiomeType;
 }
 
+/** Scene completion results, augmented with mode/character/identity by the repository. */
 export interface GameOverData {
+  /** Floored final score. */
   score: number;
+  /** Floored final distance in game meters. */
   distanceMeters: number;
+  /** Total coin pickups during this run. */
   coins: number;
+  /** Total relic pickups during this run. */
   relics: number;
+  /** Count of successful crocodile bounce events in the current scene implementation. */
   hazardsAvoided: number;
+  /** Count of player-triggered vine releases. */
   vinesSwung: number;
+  /** Final scene cause code, such as bottomless_pit or rolling_boulder. */
   causeOfDeath: string;
+  /** Actual generation seed selected by the scene. */
   seed: number;
 }
 
-interface ActiveVine {
+/** Scene-owned pendulum state; logical tip position is derived from anchor/length/angle. */
+export interface ActiveVine {
+  /** Rendered vine, rotated around its top origin. */
   sprite: Phaser.GameObjects.Sprite;
+  /** Fixed horizontal anchor coordinate in world pixels. */
   anchorX: number;
+  /** Fixed vertical anchor coordinate in world pixels. */
   anchorY: number;
+  /** Logical tip distance from anchor in pixels. */
   length: number;
+  /** Current rotation in radians, updated by the frame loop. */
   angle: number;
+  /** Sinusoidal phase rate in radians/second. */
   speed: number;
+  /** Random initial phase offset; independent of the chunk-selection seed. */
   timeOffset: number;
 }
 
+/**
+ * Auto-running Arcade Physics scene with generated terrain and React telemetry.
+ * The scene owns transient run state; boot owns textures, React owns screens,
+ * and the repository owns completed-run progression. Static spacing checks in the
+ * catalog do not fully simulate these physics/collision rules.
+ */
 export class GameScene extends Phaser.Scene {
+  /** Shared input bridge supplied on scene initialization. */
   private inputManager!: InputManager;
+  /** Texture/animation suffix for the selected explorer. */
   private characterId = 'harry';
+  /** Active rule set governing life exhaustion and pit recovery. */
   private gameMode: GameMode = 'endless';
+  /** Actual chunk-selection seed, randomized when init receives a falsy seed. */
   private runSeed = 1337;
+  /** Per-run camera-shake gate copied from configuration. */
   private screenShakeEnabled = true;
 
+  /** Consumer of active-frame HUD snapshots. */
   private onStatsUpdateCallback!: (stats: GameHUDStats) => void;
+  /** Consumer of the first terminal run result. */
   private onGameOverCallback!: (result: GameOverData) => void;
+  /** Pause/loading/retry UI consumer for asynchronous generation. */
+  private onWorldStatusCallback!: (status: WorldStatus | null) => void;
 
   // World & Generation
-  private generator!: ProceduralWorldGenerator;
+  /** Per-run native/browser continuation owner, called only at chunk boundaries. */
+  private generator!: WorldGenerator;
+  /** At most one ahead-of-runner planning call may be in flight. */
+  private worldRequestPending = false;
+  /** Failed request distance retained unchanged for deterministic retry. */
+  private worldRequestDistance: number | null = null;
+  /** Terrain safety/error pause reason, independent of the user's pause overlay. */
+  private worldHalted = false;
+  /** Lifecycle token prevents abandoned responses from spawning into restarted scenes. */
+  private worldEpoch = 0;
+  /** Ground surface Y in the 600-pixel logical viewport. */
   private groundY = 520;
+  /** Runner world X used for distance accounting, including the initial spawn offset. */
   private currentDistancePixels = 0;
+  /** Monotonically recorded game meters, floor(world X / 24). */
   private distanceMeters = 0;
+  /** Accumulated point total before HUD/result flooring. */
   private score = 0;
+  /** Run coin pickup counter. */
   private coins = 0;
+  /** Run relic pickup counter. */
   private relics = 0;
+  /** Score factor increased by combo events, capped at five. */
   private multiplier = 1;
+  /** Consecutive bonus events; reset on unshielded damage. */
   private comboStreak = 0;
+  /** Currently increments on safe crocodile bounces, not every cleared hazard. */
   private hazardsAvoided = 0;
+  /** Successful manual vine-release counter. */
   private vinesSwung = 0;
+  /** Remaining lives, initialized to three or the practice sentinel 999. */
   private lives = 3;
+  /** Terminal guard preventing further frame work and duplicate completion callbacks. */
   private isGameOver = false;
+  /** Damage gate cleared by the flashing tween's completion callback. */
   private isInvulnerable = false;
+  /** Recorded flash duration in milliseconds; currently not decremented by update. */
   private invulnerableTimer = 0;
 
   // Powerups
+  /** One-hit protection; direct pit game-over bypasses this flag. */
   private shieldActive = false;
+  /** Coin-attraction flag controlled by its countdown. */
   private magnetActive = false;
+  /** Remaining attraction duration in milliseconds. */
   private magnetTimer = 0;
 
   // Runner Speed
+  /** Starting auto-run speed in pixels/second. */
   private baseRunSpeed = 290;
+  /** Frame-local speed including distance scaling or a quicksand collision adjustment. */
   private currentRunSpeed = 290;
 
   // Player Entity
+  /** Character sprite with Arcade body, disabled while attached to a vine. */
   private player!: Phaser.Physics.Arcade.Sprite;
+  /** Whether the shorter grounded slide collision box is active. */
   private isSliding = false;
+  /** One airborne boost is allowed between real grounded landings. */
+  private airBoostUsed = false;
+  /** Prevent stale grounded flags from treating a rapid second press as another ground jump. */
+  private jumpLaunched = false;
+  /** Held-input gate makes keyboard repeat/device duplicate notifications non-jump events. */
+  private jumpHeld = false;
+  /** Remaining slide duration in milliseconds. */
   private slideTimer = 0;
+  /** Whether player positioning is controlled by a pendulum instead of Arcade movement. */
   private isSwingingOnVine = false;
+  /** Currently attached pendulum; null after release. */
   private attachedVine: ActiveVine | null = null;
+  /** Short release lockout prevents auto-latch from undoing the Jump action. */
+  private vineRegrabTimer = 0;
+  /** Released vine stays excluded until the runner has moved outside attachment range. */
+  private releasedVine: ActiveVine | null = null;
+  /** Optional burst emitter for jump/slide dust, not continuously emitting. */
   private dustEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
 
   // Background Parallax
+  /** Midground texture scrolled at 35% of camera X. */
   private bgCanopyTile!: Phaser.GameObjects.TileSprite;
+  /** Distant texture scrolled at 15% of camera X. */
   private bgTempleTile!: Phaser.GameObjects.TileSprite;
+  /** Screen-fixed gradient beneath the tiled background layers. */
   private distantSkyGraphics!: Phaser.GameObjects.Graphics;
 
   // World Entity Groups
+  /** Static collidable ground/plank bodies. */
   private groundGroup!: Phaser.Physics.Arcade.StaticGroup;
+  /** Stationary hazard bodies plus quicksand markers. */
   private hazardsGroup!: Phaser.Physics.Arcade.Group;
+  /** Moving boulder bodies with separate ground colliders. */
   private bouldersGroup!: Phaser.Physics.Arcade.Group;
+  /** Coin bodies supporting overlap collection and magnet movement. */
   private coinsGroup!: Phaser.Physics.Arcade.Group;
+  /** Relic overlap bodies. */
   private relicsGroup!: Phaser.Physics.Arcade.Group;
+  /** Shield/magnet overlap bodies carrying a type data field. */
   private powerupsGroup!: Phaser.Physics.Arcade.Group;
+  /** Pendulums created from generated chunks; not part of a physics group. */
   private activeVines: ActiveVine[] = [];
 
   // Procedural Spawning tracking
+  /** Right edge of generated terrain in world pixels. */
   private lastSpawnedX = 0;
+  /** Biome copied from the last generated recipe for HUD reporting. */
   private currentBiome: BiomeType = 'canopy';
 
+  /** Register the stable scene key used by boot and the React bridge. */
   constructor() {
     super({ key: 'GameScene' });
   }
 
+  /**
+   * Accept run options and reset counters/power-ups/spawning bookkeeping.
+   * Falsy seeds randomize; practice uses a large life sentinel plus pit teleportation.
+   * The bridge must supply its input manager before create installs action listeners.
+   */
   init(data: GameSceneInitData) {
     this.inputManager = data.inputManager;
     this.characterId = data.characterId || 'harry';
@@ -127,6 +247,7 @@ export class GameScene extends Phaser.Scene {
     this.screenShakeEnabled = data.screenShakeEnabled !== false;
     this.onStatsUpdateCallback = data.onStatsUpdate || (() => {});
     this.onGameOverCallback = data.onGameOver || (() => {});
+    this.onWorldStatusCallback = data.onWorldStatus;
 
     this.isGameOver = false;
     this.currentDistancePixels = 0;
@@ -144,10 +265,22 @@ export class GameScene extends Phaser.Scene {
     this.activeVines = [];
     this.lastSpawnedX = 0;
     this.currentRunSpeed = this.baseRunSpeed;
+    this.worldRequestPending = false;
+    this.worldRequestDistance = null;
+    this.worldHalted = false;
+    this.worldEpoch++;
+    this.airBoostUsed = false;
+    this.jumpLaunched = false;
+    this.jumpHeld = this.inputManager.isActionActive('jump');
+    this.isSwingingOnVine = false;
+    this.attachedVine = null;
+    this.releasedVine = null;
+    this.vineRegrabTimer = 0;
   }
 
+  /** Build backgrounds/groups/runway/player, register collision/input hooks, and start music. */
   create() {
-    this.generator = new ProceduralWorldGenerator(this.runSeed);
+    this.generator = new WorldGenerator(this.runSeed);
 
     // Setup Camera and World Bounds
     const viewWidth = 960;
@@ -181,20 +314,31 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.bouldersGroup, this.onHitBoulder as any, undefined, this);
 
     // Input hooks
-    this.inputManager.onAction('jump', (pressed) => {
-      if (pressed) this.handleJumpAction();
-    });
-    this.inputManager.onAction('slide', (pressed) => {
-      if (pressed) this.handleSlideAction();
-    });
-    this.inputManager.onAction('interact', (pressed) => {
-      if (pressed) this.handleInteractAction();
+    const unsubscribe = [
+      this.inputManager.onAction('jump', (pressed) => {
+        const freshPress = pressed && !this.jumpHeld;
+        this.jumpHeld = pressed;
+        if (freshPress && this.scene.isActive()) this.handleJumpAction();
+      }),
+      this.inputManager.onAction('slide', (pressed) => {
+        if (pressed && this.scene.isActive()) this.handleSlideAction();
+      }),
+      this.inputManager.onAction('interact', (pressed) => {
+        if (pressed && this.scene.isActive()) this.handleInteractAction();
+      })
+    ];
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.worldEpoch++;
+      unsubscribe.forEach(remove => remove());
+      soundManager.stopMusic();
     });
 
     // Start Procedural Music
     soundManager.startMusic();
+    this.events.once(Phaser.Scenes.Events.CREATE, () => this.onWorldStatusCallback(null));
   }
 
+  /** Create a screen-fixed gradient and two camera-independent tiled background layers. */
   private createParallaxBackgrounds(w: number, h: number) {
     // Sky gradient
     this.distantSkyGraphics = this.add.graphics();
@@ -215,14 +359,18 @@ export class GameScene extends Phaser.Scene {
     this.bgCanopyTile.setAlpha(0.65);
   }
 
+  /**
+   * Spawn the runner with a 30-by-54 pixel body, follow-camera offset, and dust bursts.
+   * Player-specific gravity is added to the world gravity configured by the bridge.
+   */
   private createPlayer() {
     this.player = this.physics.add.sprite(180, this.groundY - 60, `player_${this.characterId}_run`);
     this.player.setCollideWorldBounds(false);
     this.player.setSize(30, 54);
     this.player.setOffset(9, 10);
-    this.player.setGravityY(1200);
+    this.player.setGravityY(MOVEMENT.playerGravity);
 
-    this.player.play(`run_${this.characterId}`);
+    this.player.play(`${this.inputManager.isActionActive('forward') ? 'run' : 'idle'}_${this.characterId}`);
 
     // Camera follow player horizontally
     this.cameras.main.startFollow(this.player, true, 0.1, 0.05, -240, 60);
@@ -239,6 +387,7 @@ export class GameScene extends Phaser.Scene {
     this.dustEmitter = dustParticles;
   }
 
+  /** Fill the initial hazard-free runway with 64-pixel tiles and advance the terrain edge. */
   private spawnSafeRunway(width: number) {
     const tileW = 64;
     for (let x = 0; x < width; x += tileW) {
@@ -248,36 +397,72 @@ export class GameScene extends Phaser.Scene {
     this.lastSpawnedX = width;
   }
 
+  /**
+   * Request ahead-of-runner terrain at the current distance, deduplicating frame calls.
+   * Retrying preserves the failed distance/continuation. Abandoned scene results
+   * cannot spawn objects or resume a newer run.
+   */
   private spawnNextWorldChunk() {
-    const chunk = this.generator.getNextChunk(this.distanceMeters);
+    if (this.worldRequestPending || this.isGameOver) return;
+    this.worldRequestPending = true;
+    this.worldRequestDistance ??= this.distanceMeters;
+    const epoch = this.worldEpoch;
+    if (this.worldHalted) {
+      this.onWorldStatusCallback({ kind: 'loading', message: 'Preparing terrain...', retry: null });
+    }
+    this.generator.next(this.worldRequestDistance).then(chunk => {
+      if (epoch !== this.worldEpoch || this.isGameOver) return;
+      try {
+        this.spawnWorldChunk(chunk);
+      } catch (error) {
+        this.worldRequestPending = false;
+        this.worldHalted = true;
+        console.error('World rendering failed after successful generation:', error);
+        this.onWorldStatusCallback({
+          kind: 'error', message: `Terrain rendering failed. Return to the menu and restart this expedition. ${String(error)}`,
+          retry: null
+        });
+        return;
+      }
+      this.worldRequestPending = false;
+      this.worldRequestDistance = null;
+      if (this.worldHalted) {
+        this.worldHalted = false;
+        this.onWorldStatusCallback(null);
+      }
+    }, error => {
+      if (epoch !== this.worldEpoch || this.isGameOver) return;
+      this.worldRequestPending = false;
+      this.worldHalted = true;
+      console.error('World generation failed:', error);
+      this.onWorldStatusCallback({
+        kind: 'error',
+        message: String(error),
+        retry: () => {
+          if (epoch === this.worldEpoch && !this.isGameOver) this.spawnNextWorldChunk();
+        }
+      });
+    });
+  }
+
+  /** Instantiate native-planned terrain plus renderer-owned bodies, pendulums and pickups. */
+  private spawnWorldChunk(chunk: PlannedChunk) {
     this.currentBiome = chunk.biome;
     const startX = this.lastSpawnedX;
     const chunkW = chunk.width;
     const tileW = 64;
 
-    // Collect pit/water gaps
-    const pitIntervals: Array<{ start: number; end: number; type: string }> = [];
-    chunk.obstacles.forEach(obs => {
-      if (obs.type === 'pit' || obs.type === 'water_lagoon' || obs.type === 'quicksand') {
-        const obsWidth = obs.width || 140;
-        pitIntervals.push({
-          start: startX + obs.xOffset - obsWidth / 2,
-          end: startX + obs.xOffset + obsWidth / 2,
-          type: obs.type
-        });
-      }
-    });
-
-    // Spawn Ground / Water Tiles
-    for (let x = startX; x < startX + chunkW; x += tileW) {
-      const midX = x + tileW / 2;
-      const inPit = pitIntervals.find(p => midX >= p.start && midX <= p.end);
-
-      if (inPit) {
-        if (inPit.type === 'water_lagoon') {
+    for (const terrain of chunk.tiles) {
+      const midX = startX + terrain.xOffset;
+      if (terrain.type !== 'ground') {
+        if (terrain.type === 'water_lagoon') {
           this.add.tileSprite(midX, this.groundY + 32, tileW, 64, 'tile_water');
-        } else if (inPit.type === 'quicksand') {
+        } else if (terrain.type === 'quicksand') {
+          const ground = this.groundGroup.create(midX, this.groundY + 32, 'tile_ground') as Phaser.Physics.Arcade.Sprite;
+          ground.refreshBody();
           const quicksand = this.hazardsGroup.create(midX, this.groundY + 32, 'tile_quicksand') as Phaser.Physics.Arcade.Sprite;
+          quicksand.setImmovable(true);
+          (quicksand.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
           quicksand.setData('hazardType', 'quicksand');
           quicksand.refreshBody();
         }
@@ -359,6 +544,7 @@ export class GameScene extends Phaser.Scene {
 
         const vineSprite = this.add.sprite(anchorX, anchorY, 'obj_vine');
         vineSprite.setOrigin(0.5, 0);
+        vineSprite.setDisplaySize(16, length);
 
         this.activeVines.push({
           sprite: vineSprite,
@@ -420,17 +606,33 @@ export class GameScene extends Phaser.Scene {
 
   // --- Controls & Mechanics ---
 
+  /**
+   * Jump higher from ground or apply one upward boost on a distinct airborne press.
+   * Vine release keeps its bonus; neither vines nor crocodiles recharge an already
+   * spent boost. Only a real grounded landing restores it.
+   */
   private handleJumpAction() {
     if (this.isGameOver) return;
 
     if (this.isSwingingOnVine) {
       // Launch off vine with forward momentum
+      this.releasedVine = this.attachedVine;
+      this.vineRegrabTimer = 400;
       this.isSwingingOnVine = false;
       this.attachedVine = null;
-      this.player.body!.enable = true;
-      (this.player.body as Phaser.Physics.Arcade.Body).setAllowGravity(true);
-      this.player.setVelocity(this.currentRunSpeed + 130, -460);
+      const center = this.player.getCenter();
+      this.player.anims.stop();
       this.player.setTexture(`player_${this.characterId}_jump`);
+      this.player.setOrigin(0.5, 0.5);
+      this.player.setRotation(0);
+      this.player.setSize(30, 54);
+      this.player.setOffset(9, 10);
+      const body = this.player.body as Phaser.Physics.Arcade.Body;
+      body.enable = true;
+      body.setAllowGravity(true);
+      body.reset(center.x, center.y);
+      this.player.setVelocity(this.inputManager.isActionActive('forward') ? this.currentRunSpeed : 0, -460);
+      this.jumpLaunched = true;
       soundManager.playVineSwing();
       this.vinesSwung++;
       this.score += 250 * this.multiplier;
@@ -439,17 +641,28 @@ export class GameScene extends Phaser.Scene {
     }
 
     const onFloor = this.player.body?.blocked.down || this.player.body?.touching.down;
-    if (onFloor && !this.isSliding) {
-      this.player.setVelocityY(-540);
+    if (this.isSliding) return;
+    if (onFloor && !this.jumpLaunched) {
+      this.jumpLaunched = true;
+      this.player.setVelocityY(-MOVEMENT.jumpVelocity);
+      this.player.anims.stop();
       this.player.setTexture(`player_${this.characterId}_jump`);
       soundManager.playJump();
 
       if (this.dustEmitter) {
         this.dustEmitter.emitParticleAt(this.player.x, this.player.y + 24, 6);
       }
+    } else if (!this.airBoostUsed) {
+      this.airBoostUsed = true;
+      this.jumpLaunched = true;
+      this.player.setVelocityY(Math.min(0, this.player.body!.velocity.y) - MOVEMENT.boostVelocity);
+      this.player.anims.stop();
+      this.player.setTexture(`player_${this.characterId}_jump`);
+      soundManager.playJump();
     }
   }
 
+  /** Start a 440 ms grounded slide with a 52-by-24 pixel collision box. */
   private handleSlideAction() {
     if (this.isGameOver || this.isSwingingOnVine) return;
     const onFloor = this.player.body?.blocked.down || this.player.body?.touching.down;
@@ -457,6 +670,7 @@ export class GameScene extends Phaser.Scene {
     if (onFloor && !this.isSliding) {
       this.isSliding = true;
       this.slideTimer = 440; // ms
+      this.player.anims.stop();
       this.player.setTexture(`player_${this.characterId}_slide`);
       this.player.setSize(52, 24);
       this.player.setOffset(4, 10);
@@ -468,21 +682,27 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Attempt a nearby vine latch unless already attached or the run is terminal. */
   private handleInteractAction() {
     // If near vine and not yet swinging, latch onto vine
     if (this.isGameOver || this.isSwingingOnVine) return;
     this.checkForVineAttachment();
   }
 
+  /** Attach to the first logical vine tip within 60 pixels; also called automatically per frame. */
   private checkForVineAttachment(): boolean {
-    const px = this.player.x;
-    const py = this.player.y;
+    if (this.vineRegrabTimer > 0 || this.isGameOver || this.isSwingingOnVine) return false;
+    const px = this.player.x + SWING_GRIP.x - 24;
+    const py = this.player.y + SWING_GRIP.y - 32;
 
     for (const vine of this.activeVines) {
-      const tipX = vine.anchorX + Math.sin(vine.angle) * vine.length;
-      const tipY = vine.anchorY + Math.cos(vine.angle) * vine.length;
+      const tip = vineTip(vine);
 
-      const dist = Phaser.Math.Distance.Between(px, py, tipX, tipY);
+      const dist = Phaser.Math.Distance.Between(px, py, tip.x, tip.y);
+      if (vine === this.releasedVine) {
+        if (dist > 100) this.releasedVine = null;
+        continue;
+      }
       if (dist < 60) {
         this.attachToVine(vine);
         return true;
@@ -491,21 +711,32 @@ export class GameScene extends Phaser.Scene {
     return false;
   }
 
+  /** Freeze Arcade motion/body and switch to the swing pose for pendulum positioning. */
   private attachToVine(vine: ActiveVine) {
     this.isSwingingOnVine = true;
     this.attachedVine = vine;
     this.isSliding = false;
     this.player.setVelocity(0, 0);
     this.player.body!.enable = false;
-    this.player.setTexture(`player_${this.characterId}_swing`);
+    this.player.play(`swing_${this.characterId}`);
+    this.player.setOrigin(SWING_GRIP.x / 48, SWING_GRIP.y / 64);
+    this.player.setRotation(vine.angle);
+    const tip = vineTip(vine);
+    this.player.setPosition(tip.x, tip.y);
     soundManager.playVineGrab();
   }
 
+  /** Restore the held-direction run/idle pose and standing body on a grounded landing. */
   private onPlayerLandGround() {
     if (this.isGameOver || this.isSwingingOnVine) return;
+    const body = this.player.body;
+    if (!body || !(body.blocked.down || body.touching.down) || body.velocity.y < 0) return;
+    this.airBoostUsed = false;
+    this.jumpLaunched = false;
 
-    if (!this.isSliding && this.player.anims.currentAnim?.key !== `run_${this.characterId}`) {
-      this.player.play(`run_${this.characterId}`);
+    const animation = `${this.inputManager.isActionActive('forward') ? 'run' : 'idle'}_${this.characterId}`;
+    if (!this.isSliding && (!this.player.anims.isPlaying || this.player.anims.currentAnim?.key !== animation)) {
+      this.player.play(animation);
       this.player.setSize(30, 54);
       this.player.setOffset(9, 10);
     }
@@ -513,6 +744,11 @@ export class GameScene extends Phaser.Scene {
 
   // --- Collisions & Hazards ---
 
+  /**
+   * Handle static-hazard overlap: crocodile descent bounce, quicksand slowdown, or damage.
+   * Crocodile bounce currently tests downward velocity/relative height, not mouthOpen.
+   * Damage is suppressed during invulnerability and after a terminal result.
+   */
   private onHitHazard(_player: any, hazard: any) {
     if (this.isGameOver || this.isInvulnerable) return;
 
@@ -524,7 +760,7 @@ export class GameScene extends Phaser.Scene {
       const hitFromAbove = this.player.y < hazard.y - 10;
       if (isFalling && hitFromAbove) {
         // Player bounced safely on top of crocodile!
-        this.player.setVelocityY(-480);
+        this.player.setVelocityY(-MOVEMENT.crocodileBounceVelocity);
         soundManager.playJump();
         this.score += 200 * this.multiplier;
         this.triggerCombo();
@@ -542,11 +778,17 @@ export class GameScene extends Phaser.Scene {
     this.takeDamage(hazardType || 'hazard');
   }
 
+  /** Route boulder overlap to damage with its distinct rolling_boulder result code. */
   private onHitBoulder(_player: any, _boulder: any) {
     if (this.isGameOver || this.isInvulnerable) return;
     this.takeDamage('rolling_boulder');
   }
 
+  /**
+   * Consume a shield or life and trigger impact feedback plus temporary invulnerability.
+   * Unshielded damage resets the combo; life exhaustion ends non-practice runs.
+   * Pit termination is handled separately and does not pass through this method.
+   */
   private takeDamage(cause: string) {
     if (this.shieldActive) {
       this.shieldActive = false;
@@ -575,6 +817,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Gate damage while a repeated alpha tween runs; completion restores opacity and vulnerability. */
   private flashInvulnerable(durationMs: number) {
     this.isInvulnerable = true;
     this.invulnerableTimer = durationMs;
@@ -592,6 +835,7 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** Destroy the coin, add 100 points at the current multiplier, then advance combo state. */
   private onCollectCoin(_player: any, coin: any) {
     coin.destroy();
     this.coins++;
@@ -600,6 +844,7 @@ export class GameScene extends Phaser.Scene {
     this.triggerCombo();
   }
 
+  /** Destroy the relic, add 500 multiplied points, advance combo, and optionally shake. */
   private onCollectRelic(_player: any, relic: any) {
     relic.destroy();
     this.relics++;
@@ -612,6 +857,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Consume a pickup to activate one-hit shielding or reset a nine-second coin magnet. */
   private onCollectPowerup(_player: any, powerup: any) {
     const type = powerup.getData('type');
     powerup.destroy();
@@ -625,6 +871,10 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Increment the streak and update floor(streak / 4) + 1, capped at five.
+   * The existing guard begins updates at streak five, so the first increase is not at four.
+   */
   private triggerCombo() {
     this.comboStreak++;
     if (this.comboStreak >= 5 && this.multiplier < 5) {
@@ -632,6 +882,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Stop runner/music scheduling and emit the final floored result exactly once. */
   private triggerGameOver(cause: string) {
     if (this.isGameOver) return;
     this.isGameOver = true;
@@ -654,13 +905,28 @@ export class GameScene extends Phaser.Scene {
 
   // --- Main Update Loop ---
 
+  /**
+   * Advance movement, timers, pendulums, distance score, spawning, cleanup, and telemetry.
+   * @param time - Phaser elapsed game-clock time in milliseconds, used for vine phase.
+   * @param delta - Frame duration in milliseconds, used for slide/magnet countdowns.
+   * @remarks Distance awards two multiplied points per new game meter. Speed grows
+   * after the 600-meter introduction by 0.07 pixels/second per meter, capped at a 130 increase. Only hazard, coin,
+   * and ground groups are currently culled behind the camera; other entities remain.
+   */
   update(time: number, delta: number) {
     if (this.isGameOver) return;
+    if (this.worldRequestPending && !this.worldHalted && this.player.x + 400 >= this.lastSpawnedX) {
+      this.worldHalted = true;
+      this.onWorldStatusCallback({ kind: 'loading', message: 'Preparing terrain...', retry: null });
+      return;
+    }
+    if (this.worldHalted) return;
+    this.vineRegrabTimer = Math.max(0, this.vineRegrabTimer - delta);
 
     const deltaSec = delta / 1000;
 
     // Difficulty Speed Scaling
-    this.currentRunSpeed = this.baseRunSpeed + Math.min(130, this.distanceMeters * 0.07);
+    this.currentRunSpeed = runSpeedAtDistance(this.distanceMeters);
 
     // Active Sliding State
     if (this.isSliding) {
@@ -669,7 +935,7 @@ export class GameScene extends Phaser.Scene {
         this.isSliding = false;
         this.player.setSize(30, 54);
         this.player.setOffset(9, 10);
-        this.player.play(`run_${this.characterId}`);
+        this.player.play(`${this.inputManager.isActionActive('forward') ? 'run' : 'idle'}_${this.characterId}`);
       }
     }
 
@@ -682,18 +948,17 @@ export class GameScene extends Phaser.Scene {
 
     if (this.isSwingingOnVine && this.attachedVine) {
       const vine = this.attachedVine;
-      const tipX = vine.anchorX + Math.sin(vine.angle) * vine.length;
-      const tipY = vine.anchorY + Math.cos(vine.angle) * vine.length;
-
-      this.player.setPosition(tipX, tipY);
-
-      // Auto check release if swinging forward near apex
-      if (vine.angle > 0.45) {
-        // Can auto release or player taps jump
-      }
+      const tip = vineTip(vine);
+      this.player.setPosition(tip.x, tip.y);
+      this.player.setRotation(vine.angle);
     } else {
       // Normal Runner Forward Movement
-      this.player.setVelocityX(this.currentRunSpeed);
+      this.player.setVelocityX(this.inputManager.isActionActive('forward') ? this.currentRunSpeed : 0);
+      this.onPlayerLandGround();
+      if (!this.isSliding && this.player.body!.velocity.y > 0
+        && !this.player.body!.blocked.down && !this.player.body!.touching.down) {
+        this.player.play(`air_${this.characterId}`, true);
+      }
       this.checkForVineAttachment();
     }
 

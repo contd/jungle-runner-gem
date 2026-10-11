@@ -1,6 +1,6 @@
 [package]
 name = "jungle-run"
-version = "0.1.0"
+version = "1.0.0"
 description = "Jungle Run - Modern Retro Adventure Game"
 authors = ["Jungle Run Team"]
 edition = "2021"
@@ -10,9 +10,12 @@ name = "jungle_run_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.0.0", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0", features = [] }
+tauri = { version = "2", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }

@@ -2,6 +2,11 @@ node_modules/
 build/
 dist/
 coverage/
+/docs/
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/gen/apple/
+src-tauri/gen/android/
 .DS_Store
 *.log
 .env*

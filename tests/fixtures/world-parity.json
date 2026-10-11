@@ -1,0 +1,26 @@
+[
+  {
+    "seed": 1337,
+    "distances": [0,99,100,299,300,599,600,1199,1200,2199,2200,3000],
+    "ids": ["warmup_stroll","warmup_stroll","intro_flat","warmup_stroll","intro_branch_slide","intro_flat","intro_vine_swing","intro_branch_slide","intro_pit_jump","swamp_quicksand_log","swamp_snake_pit","intro_branch_slide"],
+    "rngState": 4103145042
+  },
+  {
+    "seed": 1,
+    "distances": [0,99,100,299,300,599,600,1199,1200,2199,2200,3000],
+    "ids": ["warmup_stroll","warmup_stroll","intro_flat","warmup_stroll","intro_pit_jump","intro_flat","swamp_crocodile_crossing","intro_branch_slide","intro_pit_jump","swamp_crocodile_crossing","intro_vine_swing","gauntlet_crocodile_boulder"],
+    "rngState": 4103143706
+  },
+  {
+    "seed": -1,
+    "distances": [0,99,100,299,300,599,600,1199,1200,2199,2200,3000],
+    "ids": ["warmup_stroll","warmup_stroll","intro_flat","warmup_stroll","intro_pit_jump","intro_branch_slide","intro_pit_jump","swamp_quicksand_log","intro_vine_swing","swamp_snake_pit","intro_flat","gauntlet_vine_spikes"],
+    "rngState": 4103143704
+  },
+  {
+    "seed": 2147483648,
+    "distances": [0,99,100,299,300,599,600,1199,1200,2199,2200,3000],
+    "ids": ["warmup_stroll","warmup_stroll","intro_flat","warmup_stroll","intro_branch_slide","intro_pit_jump","swamp_quicksand_log","swamp_snake_pit","intro_flat","swamp_quicksand_log","swamp_snake_pit","intro_pit_jump"],
+    "rngState": 1955660057
+  }
+]

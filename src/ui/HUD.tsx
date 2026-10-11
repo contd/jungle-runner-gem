@@ -1,21 +1,33 @@
 /**
  * Jungle Run - In-Game HUD & Mobile Touch Controls Overlay
+ * @module ui/HUD
  */
 
-import React from 'react';
-import { Heart, Coins, Gem, Shield, Magnet, Pause, ArrowUp, ArrowDown } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Heart, Coins, Gem, Shield, Magnet, Pause, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
 import { GameHUDStats } from '../game/scenes/GameScene.ts';
 import { GameMode } from '../data/types.ts';
 import { InputManager } from '../game/input/InputManager.ts';
 
-interface HUDProps {
+/** Active-run telemetry and action callbacks, independent of persistence. */
+export interface HUDProps {
+  /** Latest scene snapshot containing score, pickups, power-ups, lives, and biome. */
   stats: GameHUDStats;
+  /** Practice mode substitutes an infinity label for the three-heart display. */
   gameMode: GameMode;
+  /** Already-resolved user preference/device-capability decision for virtual buttons. */
   showTouchControls: boolean;
+  /** Logical action bridge used by both touch and mouse button handlers. */
   inputManager: InputManager;
+  /** Application-owned transition to pause. */
   onPause: () => void;
 }
 
+/**
+ * Render telemetry without intercepting the canvas except at interactive controls.
+ * Virtual buttons emit paired press/release events; gesture recognition on the
+ * underlying game surface is handled separately by InputManager.
+ */
 export const HUD: React.FC<HUDProps> = ({
   stats,
   gameMode,
@@ -23,6 +35,11 @@ export const HUD: React.FC<HUDProps> = ({
   inputManager,
   onPause
 }) => {
+  useEffect(() => () => {
+    inputManager.triggerAction('forward', false);
+  }, [inputManager, showTouchControls]);
+
+  /** Translate scene biome keys to player-facing labels, with a generic unknown-key fallback. */
   const getBiomeName = (biome: string) => {
     switch (biome) {
       case 'canopy': return 'Deep Canopy';
@@ -122,6 +139,21 @@ export const HUD: React.FC<HUDProps> = ({
       {/* Bottom: Mobile Touch Controls (When enabled) */}
       {showTouchControls && (
         <div className="w-full flex items-end justify-between pointer-events-auto pb-2 px-1">
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              inputManager.triggerAction('forward', true);
+            }}
+            onPointerUp={() => inputManager.triggerAction('forward', false)}
+            onPointerCancel={() => inputManager.triggerAction('forward', false)}
+            onLostPointerCapture={() => inputManager.triggerAction('forward', false)}
+            className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-emerald-950/80 text-emerald-200 border-2 border-emerald-600/60 active:scale-90 transition-transform flex flex-col items-center justify-center shadow-2xl touch-none cursor-pointer"
+            aria-label="Hold to Move Forward"
+          >
+            <ArrowRight className="w-7 h-7 sm:w-9 sm:h-9" />
+            <span className="text-[10px] sm:text-xs font-bold tracking-wider uppercase">MOVE</span>
+          </button>
           {/* Left Slide / Duck Touch Button */}
           <button
             onTouchStart={(e) => {
