@@ -416,10 +416,13 @@ Successful builds upload these downloadable Actions artifacts (not GitHub Releas
 Mobile projects are generated from the current Tauri configuration in each CI
 job; `src-tauri/gen/apple` and `src-tauri/gen/android` are ignored. The Android
 job installs Java 17, SDK/build-tools 36, and NDK 28.2.13676358.
-The Android setup action explicitly installs only `platform-tools`, overriding
-its default list containing the retired `tools` SDK package; the pinned platform,
+The Node.js 24-compatible Android setup action explicitly installs only
+`platform-tools`, avoiding the retired `tools` SDK package; the pinned platform,
 build-tools, and NDK are installed in the following step.
 The iOS job uses the runner's Xcode and XcodeGen. No distribution signing secrets are needed.
+JavaScript-based workflow actions use Node.js 24-compatible releases, including
+the Pages artifact uploader's nested action. This action runtime is separate
+from the application's Node.js 24 installation and Android's Java 17 toolchain.
 The shared Tauri configuration intentionally omits `bundle.iOS.developmentTeam`:
 an empty string is rejected by Apple's project configuration even with `--no-sign`,
 whereas an omitted team is valid for the unsigned simulator build. Set a real
