@@ -374,6 +374,29 @@ and version-hook tests, Rust library/IPC tests, rustfmt, and strict Clippy befor
 any distribution job starts. Frontend assets are prepared inside the test jobs
 because native `generate_context!` tests require them.
 
+Windows MSVC library test harnesses need Common Controls v6 but do not inherit
+the production app's Tauri manifest. CI uses `tools/run-windows-tests.ps1` as
+Cargo's test runner to embed `tools/windows-test.manifest` with the Windows SDK's
+`mt.exe` before running each harness. This fixes the pre-test
+`0xc0000139 / STATUS_ENTRYPOINT_NOT_FOUND` crash without removing native IPC
+coverage or adding duplicate manifest resources to release builds. The runner
+also excludes non-system PATH directories containing stale `api-ms-win-*.dll`
+overlays, which can otherwise shadow Windows APIs. Harness arguments and failure
+exit codes pass through unchanged.
+
+For the same behavior locally, from the repository root in PowerShell:
+
+```powershell
+$runner = (Resolve-Path tools/run-windows-tests.ps1).Path
+$env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER = "pwsh -NoProfile -File $runner"
+cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
+Remove-Item Env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER
+```
+
+This requires PowerShell 7 and the x64 Windows SDK tools installed by Visual
+Studio's Desktop development with C++ workload. The runner is scoped to the
+Windows test step; normal application builds and other platforms are unchanged.
+
 Successful builds upload these downloadable Actions artifacts (not GitHub Releases):
 
 | Platform | Runner | Output |

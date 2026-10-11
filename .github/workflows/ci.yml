@@ -58,12 +58,21 @@ jobs:
       - name: Prepare assets for native test context
         run: npm run build
       - name: Rust tests
+        if: runner.os != 'Windows'
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
             xvfb-run -a cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
           else
             cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
           fi
+      - name: Rust tests with Windows harness manifest
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER: pwsh -NoProfile -File ${{ github.workspace }}/tools/run-windows-tests.ps1
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
+          exit $LASTEXITCODE
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 
   desktop:
